@@ -1,4 +1,4 @@
-import express from 'express';
+﻿import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
@@ -6,9 +6,12 @@ import compression from 'compression';
 import dotenv from 'dotenv';
 
 // Import routes
-import certificatesRouter from './api/certificates.js';
-import walletRouter from './api/wallet.js';
-import verifyRouter from './api/verify.js';
+import certificateRoutes from './routes/certificateRoutes.js';
+import walletRoutes from './routes/walletRoutes.js';
+import verifyRoutes from './routes/verifyRoutes.js';
+
+// Import middleware
+import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
 
 dotenv.config();
 
@@ -36,29 +39,21 @@ app.get('/health', (req, res) => {
 });
 
 // API Routes
-app.use('/api/certificates', certificatesRouter);
-app.use('/api/wallet', walletRouter);
-app.use('/api/verify', verifyRouter);
+app.use('/api/certificates', certificateRoutes);
+app.use('/api/wallet', walletRoutes);
+app.use('/api/verify', verifyRoutes);
 
 // Error handling middleware
-app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
-  console.error(err.stack);
-  res.status(500).json({ 
-    error: 'Something went wrong!',
-    message: process.env.NODE_ENV === 'development' ? err.message : undefined
-  });
-});
+app.use(errorHandler);
 
 // 404 handler
-app.use((req, res) => {
-  res.status(404).json({ error: 'Route not found' });
-});
+app.use(notFoundHandler);
 
 const PORT = process.env.PORT || 5000;
 
 app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
-  console.log(`📊 Environment: ${process.env.NODE_ENV}`);
-  console.log(`🌐 CORS enabled for: ${process.env.FRONTEND_URL}`);
-  console.log(`⛓️  Contract Address: ${process.env.CONTRACT_ADDRESS}`);
+  console.log(`Environment: ${process.env.NODE_ENV}`);
+  console.log(`CORS enabled for: ${process.env.FRONTEND_URL || 'http://localhost:5173'}`);
+  console.log(`Contract Address: ${process.env.CONTRACT_ADDRESS}`);
 });

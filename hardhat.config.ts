@@ -22,6 +22,15 @@ const config: HardhatUserConfig = {
     },
   },
   networks: {
+
+    apothem:{
+      type: "http",
+      chainType: "l1",
+      url: configVariable(process.env.APOTHEM_RPC_URL ? "APOTHEM_RPC_URL" : "APOTHEM_RPC_URL"),
+      accounts: [configVariable(process.env.PRIVATE_KEY ? "PRIVATE_KEY" : "PRIVATE_KEY")],
+
+    },
+
     hardhatMainnet: {
       type: "edr-simulated",
       chainType: "l1",

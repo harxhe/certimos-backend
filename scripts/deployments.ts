@@ -17,7 +17,7 @@ export const deployments: DeploymentConfig = {
     "network": "localhost",
     "blockNumber": 1,
     "transactionHash": "0x88baca3b51314de48df2e52a48e31a411a41cc02702fd088cdc1628a592a8662",
-    "deployedAt": "2025-09-21T05:07:55.341Z",
+    "deployedAt": "2025-09-21T07:12:03.739Z",
     "deployer": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"
 }
 };

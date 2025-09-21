@@ -7,9 +7,13 @@
     "@openzeppelin/contracts": "^5.4.0",
     "@pinata/sdk": "^2.1.0",
     "@supabase/supabase-js": "^2.57.4",
+    "axios": "^1.12.2",
+    "compression": "^1.8.1",
     "cors": "^2.8.5",
     "dotenv": "^17.2.2",
-    "express": "^5.1.0"
+    "express": "^5.1.0",
+    "helmet": "^8.1.0",
+    "morgan": "^1.10.1"
   },
   "devDependencies": {
     "@nomicfoundation/hardhat-ethers": "^4.0.0",
@@ -26,14 +30,27 @@
     "@nomicfoundation/ignition-core": "^3.0.0",
     "@types/chai": "^4.2.0",
     "@types/chai-as-promised": "^8.0.1",
+    "@types/compression": "^1.8.1",
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.3",
     "@types/mocha": ">=10.0.10",
+    "@types/morgan": "^1.9.10",
     "@types/node": "^22.8.5",
     "chai": "^5.1.2",
     "ethers": "^6.15.0",
     "forge-std": "foundry-rs/forge-std#v1.9.4",
     "hardhat": "^3.0.6",
     "mocha": "^11.0.0",
+    "nodemon": "^3.1.10",
+    "ts-node": "^10.9.2",
     "typescript": "~5.8.0"
   },
-  "type": "module"
+  "type": "module",
+  "scripts": {
+    "start": "node dist/src/server.js",
+    "dev": "nodemon --exec ts-node src/server.ts",
+    "build": "tsc",
+    "test": "hardhat test",
+    "test-services": "node dist/src/testServices.js"
+  }
 }

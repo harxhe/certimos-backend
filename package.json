@@ -43,12 +43,13 @@
     "mocha": "^11.0.0",
     "nodemon": "^3.1.10",
     "ts-node": "^10.9.2",
+    "tsx": "^4.20.5",
     "typescript": "~5.8.0"
   },
   "type": "module",
   "scripts": {
     "start": "node dist/src/server.js",
-    "dev": "nodemon --exec ts-node src/server.ts",
+    "dev": "nodemon --exec \"tsx src/server.ts\"",
     "build": "tsc",
     "test": "hardhat test",
     "test-services": "node dist/src/testServices.js"

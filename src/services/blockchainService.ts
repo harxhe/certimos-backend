@@ -11,7 +11,7 @@ const __dirname = path.dirname(__filename);
 
 // Load contract ABI and address
 const contractArtifact = JSON.parse(
-  fs.readFileSync(path.join(__dirname, '../../../artifacts/contracts/Certificate.sol/Certificate.json'), 'utf8')
+  fs.readFileSync(path.join(process.cwd(), 'artifacts/contracts/Certificate.sol/Certificate.json'), 'utf8')
 );
 
 

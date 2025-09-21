@@ -8,5 +8,8 @@
     "skipLibCheck": true,
     "moduleResolution": "node16",
     "outDir": "dist"
+  },
+  "ts-node": {
+    "esm": true
   }
 }

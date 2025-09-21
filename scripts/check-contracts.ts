@@ -27,7 +27,7 @@ async function checkContractDeployment() {
   
   if (!contractAddress) {
     // Fallback to manual address if deployments file doesn't exist
-    contractAddress = "0xD1F6047B6D0A9C4eDad86404c185e80Eb8Dd172D"; // Replace with the address you want to check
+    contractAddress = "0x14110409Bcf17465c863493c40dB7ffd49329c6D"; // Replace with the address you want to check
     console.log("⚠  Using fallback address (deployments.ts not found or no deployment for this network)");
   } else {
     console.log("✅ Using address from deployments.ts");

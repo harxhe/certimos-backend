@@ -5,6 +5,8 @@ export interface DeploymentInfo {
   transactionHash: string;
   deployedAt: string;
   deployer: string;
+  contractName: string;
+  owner: string;
 }
 
 export interface DeploymentConfig {
@@ -12,12 +14,14 @@ export interface DeploymentConfig {
 }
 
 export const deployments: DeploymentConfig = {
-  "localhost": {
-    "contractAddress": "0x5FbDB2315678afecb367f032d93F642f64180aa3",
-    "network": "localhost",
-    "blockNumber": 1,
-    "transactionHash": "0x88baca3b51314de48df2e52a48e31a411a41cc02702fd088cdc1628a592a8662",
-    "deployedAt": "2025-09-21T07:12:03.739Z",
-    "deployer": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"
-}
+  "apothem": {
+    "contractAddress": "0xBe285C5749061Bea804E509ee4eae309B0Fc4949",
+    "network": "apothem",
+    "blockNumber": 73848370,
+    "transactionHash": "0x34ddf51d4169cadc7a41a7e49e9f6278de5808696ccba24c9fac6038b4adef87",
+    "deployedAt": "2025-09-21T17:57:17.033Z",
+    "deployer": "0x49a67881cCabd2b8cCD71d77400edc8a831fC385",
+    "contractName": "Certificate",
+    "owner": "0x49a67881cCabd2b8cCD71d77400edc8a831fC385"
+  }
 };

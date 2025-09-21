@@ -7,13 +7,16 @@
     "@openzeppelin/contracts": "^5.4.0",
     "@pinata/sdk": "^2.1.0",
     "@supabase/supabase-js": "^2.57.4",
+    "@types/multer": "^2.0.0",
     "axios": "^1.12.2",
     "compression": "^1.8.1",
     "cors": "^2.8.5",
     "dotenv": "^17.2.2",
     "express": "^5.1.0",
     "helmet": "^8.1.0",
-    "morgan": "^1.10.1"
+    "ipfs-http-client": "^60.0.1",
+    "morgan": "^1.10.1",
+    "multer": "^2.0.2"
   },
   "devDependencies": {
     "@nomicfoundation/hardhat-ethers": "^4.0.0",

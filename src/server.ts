@@ -9,6 +9,7 @@ import dotenv from 'dotenv';
 import certificateRoutes from './routes/certificateRoutes.js';
 import walletRoutes from './routes/walletRoutes.js';
 import verifyRoutes from './routes/verifyRoutes.js';
+import bulkRoutes from './routes/contractroute.js';
 
 // Import middleware
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
@@ -42,6 +43,7 @@ app.get('/health', (req, res) => {
 app.use('/api/certificates', certificateRoutes);
 app.use('/api/wallet', walletRoutes);
 app.use('/api/verify', verifyRoutes);
+app.use('/api/contracts',bulkRoutes);
 
 // Error handling middleware
 app.use(errorHandler);

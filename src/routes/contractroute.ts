@@ -2,19 +2,14 @@ import {Router, Request, Response} from 'express';
 import path from 'path';
 import fs from 'fs';
 import multer from 'multer';
-import util from 'util';
-import { exec, spawn} from 'child_process';
+import {spawn} from 'child_process';
 import { 
-  generateCertificatesHandler, 
   autoMintCertificatesFromCSV,
-  generateCertificatesFromCSV,
   parseRecipientsCSV
 } from '../controllers/generateContractController.js';
 
-import { fetchcontract } from '../../scripts/deployments.js';
-import { eventNames } from 'process';
+import { fetchcontract } from '../../scripts/deployment-utils.js';
 
-const execAsync = util.promisify(exec);
 
 // Configure multer for file uploads
 const storage = multer.diskStorage({
@@ -86,10 +81,27 @@ router.post('/auto-mint-with-ipfs', upload.single('csvFile'), async (req: any, r
       });
     }
 
-    const contactName = req.body.contractName;
+    const contractName = req.body.contractName;
     const eventName = req.body.eventName;
     const certificateName = req.body.certificateName;
-    const contractAddress = await fetchcontract(contactName);
+    
+    if (!contractName) {
+      return res.status(400).json({
+        error: 'Contract name is required',
+        message: 'Please provide a valid contract name in the request body'
+      });
+    }
+
+    console.log('Contract Name:', contractName);
+    let contractAddress;
+    try {
+      contractAddress = await fetchcontract(contractName);
+    } catch (error: any) {
+      return res.status(404).json({
+        error: 'Contract not found',
+        message: error.message
+      });
+    }
 
     console.log('🚀 Starting enhanced automatic certificate minting with IPFS/Pinata upload...');
     
@@ -121,7 +133,7 @@ router.post('/auto-mint-with-ipfs', upload.single('csvFile'), async (req: any, r
       results: result.results.map(r => ({
         success: r.success,
         recipientName: r.recipient.name,
-        walletAddress: process.env.WALLET_ADDRESS,
+        walletAddress: req.session.walletAddress,
         email: r.recipient.email,
         course: r.recipient.course,
         certificateType: r.certificateType,
@@ -296,31 +308,27 @@ router.post('/deploy', async (req: Request, res: Response) => {
 
   const { networkName, contractName, walletAddress } = req.body;
   console.log(`[DEBUG] Request Body:`, { networkName, contractName, walletAddress });
-  if (!networkName || !contractName || !walletAddress) {
-    console.error("[DEBUG] Validation failed: Missing networkName, contractName, or walletAddress.");
+  if (!contractName || !walletAddress) {
+    console.error("[DEBUG] Validation failed: Missing contractName or walletAddress.");
     return res.status(400).json({
       error: 'Missing required fields',
-      required: ['networkName', 'contractName', 'walletAddress'],
+      required: ['contractName', 'walletAddress'],
     });
   }
-
-  process.env.WALLET_ADDRESS = walletAddress;
 
   console.log(`[DEBUG] 🚀 Spawning deployment process...`);
 
   const runDeployment = () => new Promise<string>((resolve, reject) => {
     const scriptPath = path.join(process.cwd(), 'scripts', 'deploy.ts');
-    const command = 'yarn';
-    const args = ['hardhat', 'run', scriptPath, '--network', networkName];
-    
-    console.log(`[DEBUG] Executing command: ${command} ${args.join(' ')}`);
-    console.log(`[DEBUG] With ENV: CONTRACT_NAME=${contractName}`);
-
-    const child = spawn(command, args, {
+    const command = `yarn hardhat run ${scriptPath}`;
+    console.log(`[DEBUG] Running command: ${command}`);
+    const child = spawn(command, {
       cwd: process.cwd(),
       env: {
         ...process.env,
-        CONTRACT_NAME: contractName,
+        DEPLOY_WALLET_ADDRESS: walletAddress,
+        DEPLOY_CONTRACT_NAME: contractName,
+        DEPLOY_NETWORK_NAME: networkName || 'apothem'
       },
       shell: true,
     });

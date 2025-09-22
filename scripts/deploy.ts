@@ -60,13 +60,8 @@ async function saveDeploymentInfo(deploymentInfo: DeploymentInfo) {
       owner: deploymentInfo.owner
     };
     
-    // Initialize network if it doesn't exist
-    if (!currentDeployments[deploymentInfo.network]) {
-      currentDeployments[deploymentInfo.network] = deploymentEntry;
-    } else {
-      // If network exists, add this deployment as a nested object with contractName as key
-      currentDeployments[deploymentInfo.network][deploymentInfo.contractName] = deploymentEntry;
-    }
+    // Add/update the deployment entry using contractName as the key
+    currentDeployments[deploymentInfo.contractName] = deploymentEntry;
     
     // Generate the new file content
     const newContent = `// Updated interfaces... 
@@ -97,16 +92,17 @@ export const deployments: Record<string, DeploymentConfig> = ${JSON.stringify(cu
 }
 
 async function main() {
-  // 1. Read configuration from environment variables
-  const ownerAddress = process.env.WALLET_ADDRESS;
-  const contractName = process.env.CONTRACT_NAME;
+  // Get parameters from environment variables set by the API
+  const ownerAddress = process.env.DEPLOY_WALLET_ADDRESS;
+  const contractName = process.env.DEPLOY_CONTRACT_NAME;
+  const networkName = process.env.DEPLOY_NETWORK_NAME || 'apothem';
 
   // 2. Validate the inputs
   if (!ownerAddress) {
-    throw new Error("Missing required environment variable: WALLET_ADDRESS. Please set it in your .env file.");
+    throw new Error("Missing wallet address. DEPLOY_WALLET_ADDRESS environment variable not set.");
   }
   if (!contractName) {
-    throw new Error("Missing required environment variable: CONTRACT_NAME. This should be passed from the API router.");
+    throw new Error("Missing contract name. DEPLOY_CONTRACT_NAME environment variable not set.");
   }
 
   console.log(`Deploying contract "${contractName}"...`);
@@ -131,9 +127,7 @@ async function main() {
 
   console.log(`\n"${contractName}" deployed to address:`, address);
   console.log("Verified contract owner:", await certificate.getFunction("owner")());
-  
-  const networkName = 'apothem';
-  
+    
   const deploymentInfo: DeploymentInfo = {
       contractAddress: address,
       network: networkName,

@@ -16,4 +16,10 @@ router.get('/total-supply/:walletAddress', validateWalletAddress, (req, res) => 
   certificateController.getUserCertificateCount(req, res);
 });
 
+// Mint a single certificate
+router.post('/mint', (req, res) => {
+  const certificateController = new CertificateController();
+  certificateController.mintCertificate(req, res);
+});
+
 export default router;

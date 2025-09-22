@@ -4,6 +4,27 @@ import fs from 'fs';
 import path from 'path';
 import dotenv from 'dotenv';
 
+interface CertificateData {
+  tokenId: string;
+  owner: string;
+  tokenURI: string;
+  name: string;
+  description: string;
+  image: string | null;
+  attributes: any[];
+  metadata?: any;
+}
+
+interface CertificateResponse {
+  success: boolean;
+  walletAddress: string;
+  certificates: CertificateData[];
+  count: number;
+  balance: string;
+  network: string;
+  contractAddress: string | undefined;
+}
+
 dotenv.config();
 
 // Load the contract ABI
@@ -49,94 +70,105 @@ export class CertificateController {
 
   // Get all certificates for a wallet
   async getUserCertificates(req: Request, res: Response) {
-    try {
-      const { walletAddress } = req.params;
-      
-      // Validate wallet address format
-      if (!walletAddress.match(/^0x[a-fA-F0-9]{40}$/)) {
-        return res.status(400).json({ error: 'Invalid wallet address format' });
-      }
+  try {
+    const { walletAddress } = req.params;
+    
+    if (!walletAddress.match(/^0x[a-fA-F0-9]{40}$/)) {
+      return res.status(400).json({ error: 'Invalid wallet address format' });
+    }
 
-      this.initializeContract();
+    this.initializeContract();
 
-      // Get the balance of NFTs owned by this wallet
-      const balance = await this.contract!.balanceOf(walletAddress);
-      const certificates = [];
-
-      // Since this contract doesn't have ERC721Enumerable, we need to check token IDs manually
-      // Check the first 100 possible token IDs (should be sufficient for most cases)
-      const maxTokensToCheck = 100;
-      
-      for (let tokenId = 0; tokenId < maxTokensToCheck; tokenId++) {
-        try {
-          // Check if this token exists and is owned by the user
-          const owner = await this.contract!.ownerOf(tokenId);
-          
-          if (owner.toLowerCase() === walletAddress.toLowerCase()) {
-            // Get token URI (metadata)
-            let tokenURI = '';
-            try {
-              tokenURI = await this.contract!.tokenURI(tokenId);
-            } catch (uriError) {
-              console.warn(`Could not get URI for token ${tokenId}`);
-            }
-
-            let metadata = null;
-            if (tokenURI) {
-              try {
-                // If tokenURI is a HTTP URL, fetch it
-                if (tokenURI.startsWith('http')) {
-                  const response = await fetch(tokenURI);
-                  metadata = await response.json();
-                } else if (tokenURI.startsWith('data:application/json')) {
-                  // If it's base64 encoded JSON
-                  const base64Data = tokenURI.split(',')[1];
-                  const jsonString = Buffer.from(base64Data, 'base64').toString();
-                  metadata = JSON.parse(jsonString);
-                }
-              } catch (metadataError) {
-                console.warn(`Could not parse metadata for token ${tokenId}`);
-              }
-            }
-
-            certificates.push({
-              tokenId: tokenId.toString(),
-              owner,
-              tokenURI,
-              metadata,
-              name: metadata?.name || `Certificate #${tokenId}`,
-              description: metadata?.description || 'Certificate NFT',
-              image: metadata?.image || null,
-              attributes: metadata?.attributes || []
-            });
-          }
-
-        } catch (tokenError) {
-          // Token doesn't exist or other error - this is expected for non-existent tokens
-        }
-      }
-
-      const result = {
+    // Early exit if no certificates
+    const balance = await this.contract!.balanceOf(walletAddress);
+    if (balance.toString() === '0') {
+      return res.json({
         success: true,
         walletAddress,
-        certificates,
-        count: certificates.length,
-        balance: balance.toString(),
+        certificates: [],
+        count: 0,
+        balance: '0',
         network: 'XDC Apothem',
         contractAddress: process.env.CONTRACT_ADDRESS
-      };
-
-      res.json(result);
-
-    } catch (error) {
-      console.error('❌ Error fetching certificates:', error);
-      res.status(500).json({
-        success: false,
-        error: 'Failed to fetch certificates',
-        message: error instanceof Error ? error.message : 'Internal server error'
-      });  
+      });
     }
+
+    const certificates: CertificateData[] = [];
+    const maxTokensToCheck = 100;
+    const batchSize = 10;
+    
+    // Process in parallel batches
+    for (let i = 0; i < maxTokensToCheck; i += batchSize) {
+      const tokenPromises: Promise<CertificateData | null>[] = [];
+      
+      for (let tokenId = i; tokenId < Math.min(i + batchSize, maxTokensToCheck); tokenId++) {
+        tokenPromises.push(this.checkTokenOwnership(tokenId, walletAddress));
+      }
+      
+      const batchResults = await Promise.allSettled(tokenPromises);
+      
+      batchResults.forEach((result) => {
+        if (result.status === 'fulfilled' && result.value) {
+          certificates.push(result.value);
+        }
+      });
+
+      // Early exit when found all certificates
+      if (certificates.length === parseInt(balance.toString())) {
+        break;
+      }
+    }
+
+    const result: CertificateResponse = {
+      success: true,
+      walletAddress,
+      certificates,
+      count: certificates.length,
+      balance: balance.toString(),
+      network: 'XDC Apothem',
+      contractAddress: process.env.CONTRACT_ADDRESS
+    };
+
+    res.json(result);
+
+  } catch (error) {
+    console.error('❌ Error fetching certificates:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch certificates',
+      message: error instanceof Error ? error.message : 'Internal server error'
+    });  
   }
+}
+
+async checkTokenOwnership(tokenId: number, walletAddress: string): Promise<CertificateData | null> {
+  try {
+    const owner = await this.contract!.ownerOf(tokenId);
+    
+    if (owner.toLowerCase() === walletAddress.toLowerCase()) {
+      let tokenURI = '';
+      try {
+        tokenURI = await this.contract!.tokenURI(tokenId);
+      } catch (uriError) {
+        console.warn(`Could not get URI for token ${tokenId}`);
+      }
+
+      return {
+        tokenId: tokenId.toString(),
+        owner,
+        tokenURI,
+        name: `Certificate #${tokenId}`,
+        description: 'Certificate NFT',
+        image: null,
+        attributes: []
+      } as CertificateData;
+    }
+    
+    return null;
+  } catch (error) {
+    return null;
+  }
+}
 
   // Get total supply of certificates for a user
   async getUserCertificateCount(req: Request, res: Response) {

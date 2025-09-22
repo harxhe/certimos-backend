@@ -57,5 +57,4 @@ app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
   console.log(`Environment: ${process.env.NODE_ENV}`);
   console.log(`CORS enabled for: ${process.env.FRONTEND_URL || 'http://localhost:5173'}`);
-  console.log(`Contract Address: ${process.env.CONTRACT_ADDRESS}`);
 });

@@ -2,7 +2,6 @@ import { network } from "hardhat";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
-import readline from "readline";
 import dotenv from "dotenv";
 dotenv.config();
 
@@ -11,154 +10,159 @@ const __dirname = path.dirname(__filename);
 
 const { ethers } = await network.connect();
 
-
-const r1 = readline.createInterface({
-  input: process.stdin,
-  output: process.stdout
-});
-
-
-export function getReceiverId(): Promise<string> {
-  return new Promise((resolve) => {
-    r1.question('Enter the receiverId: ', (receiverId) => {
-      resolve(receiverId);
-    });
-  });
+// Define the structure for deployment information
+interface DeploymentInfo {
+  contractAddress: string;
+  network: string;
+  transactionHash: string;
+  deployedAt: string;
+  deployer: string;
+  contractName: string;
+  owner: string;
 }
 
-// Function to save deployment info
-async function saveDeploymentInfo(contractAddress: string, deployer: string, deployTx: any, networkName: string) {
-  const deploymentInfo = {
-    contractAddress,
-    network: networkName,
-    blockNumber: deployTx.blockNumber || 0,
-    transactionHash: deployTx.hash || "",
-    deployedAt: new Date().toISOString(),
-    deployer
-  };
-
-  const deploymentsPath = path.join(__dirname, "deployments.ts");
+// NOTE: A full implementation for saving to deployments.ts would go here.
+// For now, this is a placeholder to show where it would be called.
+async function saveDeploymentInfo(deploymentInfo: DeploymentInfo) {
+  console.log("📝 Saving deployment information...");
   
-  // Read existing deployments or create new
-  let deploymentsContent = `export interface DeploymentInfo {
-  contractAddress: string;
-  network: string;
-  blockNumber: number;
-  transactionHash: string;
-  deployedAt: string;
-  deployer: string;
-}
-
-export interface DeploymentConfig {
-  [network: string]: DeploymentInfo;
-}
-
-export const deployments: DeploymentConfig = {\n`;
-
-  // Try to read existing deployments
+  const deploymentsFilePath = path.join(__dirname, 'deployments.ts');
+  
   try {
-    if (fs.existsSync(deploymentsPath)) {
-      const existingContent = fs.readFileSync(deploymentsPath, 'utf8');
-      const match = existingContent.match(/export const deployments: DeploymentConfig = ({[\s\S]*?});/);
-      if (match) {
-        const existingDeployments = eval((`${match[1]}`));
-        existingDeployments[networkName] = deploymentInfo;
-        
-        deploymentsContent = `export interface DeploymentInfo {
-  contractAddress: string;
-  network: string;
-  blockNumber: number;
-  transactionHash: string;
-  deployedAt: string;
-  deployer: string;
-}
-
-export interface DeploymentConfig {
-  [network: string]: DeploymentInfo;
-}
-
-export const deployments: DeploymentConfig = ${JSON.stringify(existingDeployments, null, 2)};`;
+    let currentDeployments: Record<string, any> = {};
+    
+    // Read and parse the current deployments file if it exists
+    if (fs.existsSync(deploymentsFilePath)) {
+      const deploymentsContent = fs.readFileSync(deploymentsFilePath, 'utf8');
+      
+      // Extract the deployments object from the file using regex
+      const deploymentMatch = deploymentsContent.match(/export const deployments: Record<string, DeploymentConfig> = ({[\s\S]*?});/);
+      if (deploymentMatch) {
+        try {
+          // Parse the JSON part
+          currentDeployments = JSON.parse(deploymentMatch[1]);
+        } catch (parseError) {
+          console.warn("Could not parse existing deployments, starting fresh:", parseError);
+          currentDeployments = {};
+        }
       }
-    } else {
-      deploymentsContent += `  "${networkName}": ${JSON.stringify(deploymentInfo, null, 4)}\n`;
-      deploymentsContent += `};`;
     }
-  } catch (error) {
-    deploymentsContent += `  "${networkName}": ${JSON.stringify(deploymentInfo, null, 4)}\n`;
-    deploymentsContent += `};`;
+    
+    // Create deployment entry
+    const deploymentEntry = {
+      contractAddress: deploymentInfo.contractAddress,
+      network: deploymentInfo.network,
+      blockNumber: 0, // You might want to get this from the transaction receipt
+      transactionHash: deploymentInfo.transactionHash,
+      deployedAt: deploymentInfo.deployedAt,
+      deployer: deploymentInfo.deployer,
+      contractName: deploymentInfo.contractName,
+      owner: deploymentInfo.owner
+    };
+    
+    // Initialize network if it doesn't exist
+    if (!currentDeployments[deploymentInfo.network]) {
+      currentDeployments[deploymentInfo.network] = deploymentEntry;
+    } else {
+      // If network exists, add this deployment as a nested object with contractName as key
+      currentDeployments[deploymentInfo.network][deploymentInfo.contractName] = deploymentEntry;
+    }
+    
+    // Generate the new file content
+    const newContent = `// Updated interfaces... 
+
+  interface DeploymentConfig {
+    contractAddress: string;
+    network: string;
+    blockNumber: number;
+    transactionHash: string;
+    deployedAt: string;
+    deployer: string;
+    [key: string]: any; // For additional dynamic properties like contractName, owner, etc.
   }
 
-  fs.writeFileSync(deploymentsPath, deploymentsContent);
-  console.log("📝 Deployment info saved to deployments.ts");
+
+export const deployments: Record<string, DeploymentConfig> = ${JSON.stringify(currentDeployments, null, 2)};
+`;
+    
+    // Write the updated deployments file
+    fs.writeFileSync(deploymentsFilePath, newContent, 'utf8');
+    console.log(`✅ Deployment information saved to ${deploymentsFilePath}`);
+    console.log(`📍 Contract "${deploymentInfo.contractName}" added to network "${deploymentInfo.network}"`);
+    
+  } catch (error) {
+    console.error("❌ Error saving deployment information:", error);
+    throw error;
+  }
 }
 
 async function main() {
+  // 1. Read configuration from environment variables
+  const ownerAddress = process.env.WALLET_ADDRESS;
+  const contractName = process.env.CONTRACT_NAME;
 
-  const receivingID  = await getReceiverId();
+  // 2. Validate the inputs
+  if (!ownerAddress) {
+    throw new Error("Missing required environment variable: WALLET_ADDRESS. Please set it in your .env file.");
+  }
+  if (!contractName) {
+    throw new Error("Missing required environment variable: CONTRACT_NAME. This should be passed from the API router.");
+  }
 
-  console.log("Deploying Certificate contract...");
+  console.log(`Deploying contract "${contractName}"...`);
+  console.log(`Owner will be set to (from .env): ${ownerAddress}`);
 
-  // Get the first signer (deployer) as the initial owner
   const [deployer] = await ethers.getSigners();
-  console.log("Deploying contracts with account:", deployer.address);
+  console.log("Deploying contract with account:", deployer.address);
 
-  // Get the ContractFactory for Certificate
+  console.log("\nGetting contract factory for 'Certificate'...");
   const Certificate = await ethers.getContractFactory("Certificate");
 
-  // Deploy the contract with the deployer as the initial owner
-  const certificate = await Certificate.deploy(deployer.address);
+  console.log(`Sending deployment transaction with owner ${ownerAddress}... (This may take a moment)`);
+  const certificate = await Certificate.deploy(ownerAddress);
 
-  // Wait for the deployment to be mined
+  console.log("Waiting for deployment transaction to be mined...");
   await certificate.waitForDeployment();
+  console.log("✅ Deployment transaction mined!");
 
-  // Get the deployed contract address
+
   const address = await certificate.getAddress();
-  
-  // Get deployment transaction details
   const deployTx = certificate.deploymentTransaction();
 
-  console.log("Certificate deployed to:", address);
-  console.log("Contract owner:", await certificate.getFunction("owner")());
+  console.log(`\n"${contractName}" deployed to address:`, address);
+  console.log("Verified contract owner:", await certificate.getFunction("owner")());
   
-  // Save deployment info to file
-  const networkName = process.env.HARDHAT_NETWORK || "localhost";
-  await saveDeploymentInfo(address, deployer.address, deployTx, networkName);
+  const networkName = 'apothem';
   
-  console.log("Deployment successful!");
+  const deploymentInfo: DeploymentInfo = {
+      contractAddress: address,
+      network: networkName,
+      transactionHash: deployTx?.hash || '',
+      deployedAt: new Date().toISOString(),
+      deployer: deployer.address,
+      contractName: contractName,
+      owner: ownerAddress
+  };
 
-  // Example: Mint certificates to recipients
-  console.log("\n--- Minting Certificates ---");
+ await saveDeploymentInfo(deploymentInfo);
+  console.log("\nDeployment successful!");
+
+  // 3. Output the final result as a JSON string for the API to parse
+  const result = {
+    success: true,
+    deploymentInfo
+  };
   
-  // Define recipients and their certificate metadata URIs
-  const recipients = [
-    {
-      address: receivingID, // Example recipient address
-      tokenURI: "ipfs://QmYourMetadataHash1" // Replace with actual IPFS URI
-    }
-    // Add more recipients here as needed
-  ];
-
-  // Mint certificates for each recipient
-  for (let i = 0; i < recipients.length; i++) {
-    const recipient = recipients[i];
-    console.log(`Minting certificate ${i + 1} for recipient: ${recipient.address}`);
-    
-    try {
-      const tx = await certificate.getFunction("mintCertificate")(recipient.address, recipient.tokenURI);
-      await tx.wait(); // Wait for transaction to be mined
-      console.log(`✅ Certificate minted successfully! Transaction: ${tx.hash}`);
-    } catch (error) {
-      console.error(`❌ Failed to mint certificate for ${recipient.address}:`, error);
-    }
-  }
-  console.log("\n--- Certificate Minting Complete ---");
-
+  console.log("DEPLOYMENT_RESULT:", JSON.stringify(result));
 }
+
 main()
-  .then(() => {
-    process.exit(0);
-  })
+  .then(() => process.exit(0))
   .catch((error) => {
     console.error("Error deploying contract:", error);
+    const result = { success: false, error: error.message };
+    // Also output a JSON result on failure
+    console.log("DEPLOYMENT_RESULT:", JSON.stringify(result));
     process.exit(1);
   });
+

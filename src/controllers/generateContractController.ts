@@ -345,13 +345,12 @@ export async function generateCertificatesHandler(req: Request, res: Response) {
 }
 
 // New function to automatically mint certificates from CSV without confirmation
-export async function autoMintCertificatesFromCSV(csvFile: string): Promise<{
+export async function autoMintCertificatesFromCSV(csvFile: string, contractAddress: string, eventName: string, certificateName: string): Promise<{
   success: boolean;
   totalProcessed: number;
   successCount: number;
   failCount: number;
   results: MintingResult[];
-  contractAddress?: string;
   error?: string;
 }> {
   try {
@@ -359,6 +358,7 @@ export async function autoMintCertificatesFromCSV(csvFile: string): Promise<{
     
     // 1. Parse CSV file
     const recipients = await parseRecipientsCSV(csvFile);
+
     console.log(`📊 Loaded ${recipients.length} recipients from CSV`);
     
     if (recipients.length === 0) {
@@ -373,9 +373,9 @@ export async function autoMintCertificatesFromCSV(csvFile: string): Promise<{
     }
 
     // 2. Get contract address
-    let contractAddress = await getDeployedContractAddress();
-    
-    if (!contractAddress) {
+      const address = contractAddress;
+
+    if (!address) {
       // Fallback to environment variable or hardcoded address
       throw new Error('Contract address not found in deployments or environment variables');
     } else {
@@ -434,10 +434,10 @@ export async function autoMintCertificatesFromCSV(csvFile: string): Promise<{
       try {
         // Create certificate metadata
         const metadata: CertificateMetadata = {
-          name: `Certificate of Completion - ${recipient.name}`,
+          name: certificateName,
           description: `This certificate is awarded to ${recipient.name} for successfully completing the course${recipient.course ? `: ${recipient.course}` : ''}.`,
           image: "https://gateway.pinata.cloud/ipfs/QmYourImageHash", // Replace with actual certificate image
-          event_name: recipient.course || "Course Completion",
+          event_name: eventName,
           recipient_name: recipient.name,
           date_issued: recipient.completionDate || new Date().toISOString().split('T')[0],
           certificate_id: `CERT-${Date.now()}-${i + 1}`,
@@ -534,7 +534,6 @@ export async function autoMintCertificatesFromCSV(csvFile: string): Promise<{
       successCount,
       failCount,
       results,
-      contractAddress
     };
 
   } catch (error: any) {

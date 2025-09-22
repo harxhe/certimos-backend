@@ -2,13 +2,19 @@ import {Router, Request, Response} from 'express';
 import path from 'path';
 import fs from 'fs';
 import multer from 'multer';
-import { execSync } from 'child_process';
+import util from 'util';
+import { exec, spawn} from 'child_process';
 import { 
   generateCertificatesHandler, 
   autoMintCertificatesFromCSV,
   generateCertificatesFromCSV,
   parseRecipientsCSV
 } from '../controllers/generateContractController.js';
+
+import { fetchcontract } from '../../scripts/deployments.js';
+import { eventNames } from 'process';
+
+const execAsync = util.promisify(exec);
 
 // Configure multer for file uploads
 const storage = multer.diskStorage({
@@ -44,285 +50,16 @@ const upload = multer({
 const router = Router();
 
 // Function to run the deploy.ts script
-async function runDeployScript(receiverId: string): Promise<{
-  success: boolean;
-  contractAddress?: string;
-  transactionHash?: string;
-  error?: string;
-  deploymentInfo?: any;
-}> {
-  try {
-    console.log(`🚀 Running deploy.ts script with receiverId: ${receiverId}`);
-    
-    // Create a temporary script that automatically provides the receiverId
-    const tempScriptContent = `
-import { network } from "hardhat";
-import fs from "fs";
-import path from "path";
-import { fileURLToPath } from "url";
-import dotenv from "dotenv";
-dotenv.config();
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-const { ethers } = await network.connect();
-
-// Function to save deployment info
-async function saveDeploymentInfo(contractAddress: string, deployer: string, deployTx: any, networkName: string) {
-  const deploymentInfo = {
-    contractAddress,
-    network: networkName,
-    blockNumber: deployTx.blockNumber || 0,
-    transactionHash: deployTx.hash || "",
-    deployedAt: new Date().toISOString(),
-    deployer
-  };
-
-  const deploymentsPath = path.join(__dirname, "deployments.ts");
-  
-  let deploymentsContent = \`export interface DeploymentInfo {
-  contractAddress: string;
-  network: string;
-  blockNumber: number;
-  transactionHash: string;
-  deployedAt: string;
-  deployer: string;
-}
-
-export interface DeploymentConfig {
-  [network: string]: DeploymentInfo;
-}
-
-export const deployments: DeploymentConfig = {\\n\`;
-
-  // Try to read existing deployments
-  try {
-    if (fs.existsSync(deploymentsPath)) {
-      const existingContent = fs.readFileSync(deploymentsPath, 'utf8');
-      const match = existingContent.match(/export const deployments: DeploymentConfig = ({[\\s\\S]*?});/);
-      if (match) {
-        const existingDeployments = eval((\`\${match[1]}\`));
-        existingDeployments[networkName] = deploymentInfo;
-        
-        deploymentsContent = \`export interface DeploymentInfo {
-  contractAddress: string;
-  network: string;
-  blockNumber: number;
-  transactionHash: string;
-  deployedAt: string;
-  deployer: string;
-}
-
-export interface DeploymentConfig {
-  [network: string]: DeploymentInfo;
-}
-
-export const deployments: DeploymentConfig = \${JSON.stringify(existingDeployments, null, 2)};\`;
-      }
-    } else {
-      deploymentsContent += \`  "\${networkName}": \${JSON.stringify(deploymentInfo, null, 4)}\\n\`;
-      deploymentsContent += \`};\`;
-    }
-  } catch (error) {
-    deploymentsContent += \`  "\${networkName}": \${JSON.stringify(deploymentInfo, null, 4)}\\n\`;
-    deploymentsContent += \`};\`;
-  }
-
-  fs.writeFileSync(deploymentsPath, deploymentsContent);
-  console.log("📝 Deployment info saved to deployments.ts");
-  return deploymentInfo;
-}
-
-async function main() {
-  const receivingID = "${receiverId}";
-
-  console.log("Deploying Certificate contract...");
-
-  const [deployer] = await ethers.getSigners();
-  console.log("Deploying contracts with account:", deployer.address);
-
-  const Certificate = await ethers.getContractFactory("Certificate");
-  const certificate = await Certificate.deploy(deployer.address);
-  await certificate.waitForDeployment();
-
-  const address = await certificate.getAddress();
-  const deployTx = certificate.deploymentTransaction();
-
-  console.log("Certificate deployed to:", address);
-  console.log("Contract owner:", await certificate.getFunction("owner")());
-  
-  const networkName = process.env.HARDHAT_NETWORK || "apothem";
-  const deploymentInfo = await saveDeploymentInfo(address, deployer.address, deployTx, networkName);
-  
-  console.log("Deployment successful!");
-
-  // Output deployment result as JSON for parsing
-  const result = {
-    success: true,
-    contractAddress: address,
-    transactionHash: deployTx?.hash || '',
-    deploymentInfo
-  };
-  
-  console.log("DEPLOYMENT_RESULT:", JSON.stringify(result));
-  
-  return result;
-}
-
-main()
-  .then(() => {
-    process.exit(0);
-  })
-  .catch((error) => {
-    console.error("Error deploying contract:", error);
-    const result = {
-      success: false,
-      error: error.message
-    };
-    console.log("DEPLOYMENT_RESULT:", JSON.stringify(result));
-    process.exit(1);
-  });
-`;
-
-    // Write temporary script
-    const tempScriptPath = path.join(process.cwd(), 'temp-deploy.mjs');
-    fs.writeFileSync(tempScriptPath, tempScriptContent);
-
-    // Execute the deployment script
-    const output = execSync(`npx hardhat run ${tempScriptPath} --network apothem`, {
-      encoding: 'utf8',
-      cwd: process.cwd()
-    });
-
-    // Parse the result from script output
-    const lines = output.split('\n');
-    const resultLine = lines.find(line => line.includes('DEPLOYMENT_RESULT:'));
-    
-    if (resultLine) {
-      const resultJson = resultLine.replace('DEPLOYMENT_RESULT:', '').trim();
-      const result = JSON.parse(resultJson);
-      
-      // Clean up temporary script
-      fs.unlinkSync(tempScriptPath);
-      
-      return result;
-    } else {
-      throw new Error('Could not parse deployment result');
-    }
-
-  } catch (error: any) {
-    console.error('Deploy script execution failed:', error);
-    
-    // Clean up temporary script if it exists
-    const tempScriptPath = path.join(process.cwd(), 'temp-deploy.mjs');
-    if (fs.existsSync(tempScriptPath)) {
-      fs.unlinkSync(tempScriptPath);
-    }
-    
-    return {
-      success: false,
-      error: error.message
-    };
-  }
-}
-
-
-// New route to automatically mint certificates from CSV without confirmation
-router.post('/mint-from-csv', upload.single('csvFile'), async (req: any, res: Response) => {
-  try {
-    let csvFile: string;
-    
-    // Handle different input scenarios
-    if (req.file) {
-      // Case 1: CSV file uploaded
-      csvFile = req.file.path;
-    } else if (req.body.csvContent) {
-      // Case 2: CSV content provided directly as text
-      const csvContent = req.body.csvContent;
-      
-      // Save CSV content to temporary file
-      const tempDir = path.join(process.cwd(), 'temp');
-      if (!fs.existsSync(tempDir)) {
-        fs.mkdirSync(tempDir, { recursive: true });
-      }
-      
-      csvFile = path.join(tempDir, `temp-${Date.now()}.csv`);
-      fs.writeFileSync(csvFile, csvContent);
-    } else {
-      return res.status(400).json({
-        error: 'CSV data must be provided',
-        accepted_formats: [
-          'csvFile: Upload CSV file',
-          'csvContent: CSV content as text'
-        ]
-      });
-    }
-
-    console.log('🚀 Starting automatic certificate minting from CSV...');
-    
-    // Call the auto-minting function using the imported function
-    const result = await autoMintCertificatesFromCSV(csvFile);
-
-    // Clean up temporary files
-    if (req.body.csvContent && fs.existsSync(csvFile)) {
-      fs.unlinkSync(csvFile); // Remove temp file
-    }
-    if (req.file && fs.existsSync(req.file.path)) {
-      fs.unlinkSync(req.file.path); // Remove uploaded file after processing
-    }
-
-    // Prepare response
-    const response = {
-      success: result.success,
-      message: result.success 
-        ? `Successfully processed ${result.totalProcessed} recipients. ${result.successCount} certificates minted, ${result.failCount} failed.`
-        : `Failed to mint certificates: ${result.error}`,
-      summary: {
-        totalProcessed: result.totalProcessed,
-        successCount: result.successCount,
-        failCount: result.failCount,
-        contractAddress: result.contractAddress
-      },
-      results: result.results.map(r => ({
-        success: r.success,
-        recipientName: r.recipient.name,
-        walletAddress: r.recipient.walletAddress,
-        email: r.recipient.email,
-        course: r.recipient.course,
-        certificateType: r.certificateType,
-        transactionHash: r.transactionHash,
-        error: r.error
-      }))
-    };
-
-    if (result.success) {
-      res.json(response);
-    } else {
-      res.status(500).json(response);
-    }
-
-  } catch (error: any) {
-    console.error('Error in auto-mint route:', error);
-    
-    // Clean up uploaded file on error
-    if (req.file && fs.existsSync(req.file.path)) {
-      fs.unlinkSync(req.file.path);
-    }
-    
-    res.status(500).json({
-      success: false,
-      error: 'Failed to auto-mint certificates',
-      message: error.message
-    });
-  }
-});
+// (Multer configuration and other routes remain unchanged...)
 
 // Enhanced route to auto-mint certificates with IPFS/Pinata upload
 router.post('/auto-mint-with-ipfs', upload.single('csvFile'), async (req: any, res: Response) => {
   try {
     let csvFile: string;
-    
+    let imageFile: string;
+
+
+
     // Handle different input scenarios
     if (req.file) {
       // Case 1: CSV file uploaded
@@ -349,11 +86,17 @@ router.post('/auto-mint-with-ipfs', upload.single('csvFile'), async (req: any, r
       });
     }
 
+    const contactName = req.body.contractName;
+    const eventName = req.body.eventName;
+    const certificateName = req.body.certificateName;
+    const contractAddress = await fetchcontract(contactName);
+
     console.log('🚀 Starting enhanced automatic certificate minting with IPFS/Pinata upload...');
     
     // Call the auto-minting function with IPFS integration
-    const result = await autoMintCertificatesFromCSV(csvFile);
+    const result = await autoMintCertificatesFromCSV(csvFile, contractAddress, eventName, certificateName);
 
+  
     // Clean up temporary files
     if (req.body.csvContent && fs.existsSync(csvFile)) {
       fs.unlinkSync(csvFile); // Remove temp file
@@ -372,13 +115,13 @@ router.post('/auto-mint-with-ipfs', upload.single('csvFile'), async (req: any, r
         totalProcessed: result.totalProcessed,
         successCount: result.successCount,
         failCount: result.failCount,
-        contractAddress: result.contractAddress,
+        contractAddress: contractAddress,
         pinata_uploads: result.results.filter(r => r.success && r.pinataUri).length
       },
       results: result.results.map(r => ({
         success: r.success,
         recipientName: r.recipient.name,
-        walletAddress: r.recipient.walletAddress,
+        walletAddress: process.env.WALLET_ADDRESS,
         email: r.recipient.email,
         course: r.recipient.course,
         certificateType: r.certificateType,
@@ -433,8 +176,6 @@ router.get('/csv-template', (req: Request, res: Response) => {
         content_type: "multipart/form-data",
         fields: {
           csvFile: "Upload CSV file",
-          certificateName: "DevJams 2024 Certificate",
-          eventName: "DevJams 2024 Blockchain Workshop",
           description: "Certificate description (optional)",
           imageUrl: "https://example.com/image.png (optional)",
           level: "Beginner|Intermediate|Advanced (optional)",
@@ -549,57 +290,106 @@ router.post('/validate-csv', upload.single('csvFile'), async (req: any, res: Res
 });
 
 // Route to deploy a new contract using deploy.ts script
+
 router.post('/deploy', async (req: Request, res: Response) => {
+  console.log("\n[DEBUG] /deploy route hit at:", new Date().toISOString());
+
+  const { networkName, contractName, walletAddress } = req.body;
+  console.log(`[DEBUG] Request Body:`, { networkName, contractName, walletAddress });
+  if (!networkName || !contractName || !walletAddress) {
+    console.error("[DEBUG] Validation failed: Missing networkName, contractName, or walletAddress.");
+    return res.status(400).json({
+      error: 'Missing required fields',
+      required: ['networkName', 'contractName', 'walletAddress'],
+    });
+  }
+
+  process.env.WALLET_ADDRESS = walletAddress;
+
+  console.log(`[DEBUG] 🚀 Spawning deployment process...`);
+
+  const runDeployment = () => new Promise<string>((resolve, reject) => {
+    const scriptPath = path.join(process.cwd(), 'scripts', 'deploy.ts');
+    const command = 'yarn';
+    const args = ['hardhat', 'run', scriptPath, '--network', networkName];
+    
+    console.log(`[DEBUG] Executing command: ${command} ${args.join(' ')}`);
+    console.log(`[DEBUG] With ENV: CONTRACT_NAME=${contractName}`);
+
+    const child = spawn(command, args, {
+      cwd: process.cwd(),
+      env: {
+        ...process.env,
+        CONTRACT_NAME: contractName,
+      },
+      shell: true,
+    });
+
+    let stdoutData = '';
+    let stderrData = '';
+
+    child.stdout.on('data', (data) => {
+      console.log('[STDOUT]', data.toString().trim()); // Log script output line by line
+      stdoutData += data.toString();
+    });
+
+    child.stderr.on('data', (data) => {
+      console.error('[STDERR]', data.toString().trim()); // Log script errors line by line
+      stderrData += data.toString();
+    });
+    
+    child.on('close', (code) => {
+      console.log(`[DEBUG] Child process exited with code ${code}`);
+      if (code !== 0) {
+        const error = new Error(`Script exited with error code ${code}`);
+        (error as any).stdout = stdoutData;
+        (error as any).stderr = stderrData;
+        return reject(error);
+      }
+      resolve(stdoutData);
+    });
+
+    child.on('error', (err) => {
+      console.error("[DEBUG] Failed to start child process.", err);
+      reject(err);
+    });
+  });
+
   try {
-    const {
-      receiverId
-    } = req.body;
+    const fullOutput = await runDeployment();
+    console.log("[DEBUG] Searching for DEPLOYMENT_RESULT in script output...");
+    
+    const resultLine = fullOutput.split('\n').find(line => line.includes('DEPLOYMENT_RESULT:'));
 
-    // Validate required fields
-    if (!receiverId) {
-      return res.status(400).json({
-        error: 'Missing required field: receiverId',
-        required: ['receiverId'],
-        description: 'receiverId is the wallet address that will receive the initial test certificate'
-      });
-    }
-
-    console.log(`🚀 Deploying Certificate contract using deploy.ts script...`);
-    console.log(`📧 Receiver ID: ${receiverId}`);
-
-    // Run the deploy.ts script
-    const result = await runDeployScript(receiverId);
-
-    if (result.success) {
-      res.json({
-        success: true,
-        message: 'Contract deployed successfully using deploy.ts script',
-        deployment: {
-          contractAddress: result.contractAddress,
-          transactionHash: result.transactionHash,
-          network: result.deploymentInfo?.network || 'apothem',
-          deployer: result.deploymentInfo?.deployer,
-          deployedAt: result.deploymentInfo?.deployedAt
-        },
-        deploymentInfo: result.deploymentInfo
-      });
+    if (resultLine) {
+      console.log("[DEBUG] Found DEPLOYMENT_RESULT. Parsing JSON...");
+      const result = JSON.parse(resultLine.replace('DEPLOYMENT_RESULT:', '').trim());
+      
+      if (result.success) {
+        console.log("[DEBUG] Deployment success. Sending 200 OK response.");
+        res.json({
+          success: true,
+          message: 'Contract deployed successfully!',
+          deployment: result.deploymentInfo,
+        });
+      } else {
+        console.error("[DEBUG] Script reported a failure. Sending 500 response.");
+        res.status(500).json({ success: false, ...result });
+      }
     } else {
-      res.status(500).json({
-        success: false,
-        error: 'Deployment failed',
-        message: result.error
-      });
+      console.error("[DEBUG] DEPLOYMENT_RESULT not found in script output.");
+      throw new Error('Could not parse deployment result from script output.');
     }
-
   } catch (error: any) {
-    console.error('Error in deployment handler:', error);
+    console.error('[DEBUG] Caught an error in the deployment handler:', error.message);
     res.status(500).json({
-      error: 'Deployment failed',
-      message: error.message
+      error: 'Deployment execution failed',
+      message: error.message,
+      stdout: error.stdout, // Include captured output for debugging
+      stderr: error.stderr,
     });
   }
 });
-
 // Route to validate deployment environment
 router.get('/deploy/validate', (req: Request, res: Response) => {
   try {
@@ -683,27 +473,103 @@ router.get('/deployments', (req: Request, res: Response) => {
     if (!fs.existsSync(deploymentsPath)) {
       return res.json({
         deployments: {},
+        contracts: [],
+        total_deployments: 0,
         message: 'No deployments found'
       });
     }
 
     const deploymentsContent = fs.readFileSync(deploymentsPath, 'utf8');
-    const match = deploymentsContent.match(/export const deployments: DeploymentConfig = ({[\s\S]*?});/);
+    
+    // Updated regex to match the correct export pattern
+    const match = deploymentsContent.match(/export const deployments: Record<string, DeploymentConfig> = ({[\s\S]*?});/);
     
     if (match) {
-      const deployments = eval(`(${match[1]})`);
-      res.json({
-        deployments,
-        total_deployments: Object.keys(deployments).length
-      });
+      try {
+        // Parse the JSON structure safely
+        const deployments = JSON.parse(match[1]);
+        
+        // Extract all contracts from the nested structure
+        const contracts: any[] = [];
+        let totalDeployments = 0;
+        
+        Object.keys(deployments).forEach(network => {
+          const networkData = deployments[network];
+          
+          // Check if this is a direct deployment (has contractAddress at top level)
+          if (networkData.contractAddress) {
+            // Create a clean contract object without nested contracts
+            const cleanContract = {
+              contractAddress: networkData.contractAddress,
+              network: networkData.network || network,
+              blockNumber: networkData.blockNumber || 0,
+              transactionHash: networkData.transactionHash || '',
+              deployedAt: networkData.deployedAt || '',
+              deployer: networkData.deployer || '',
+              contractName: networkData.contractName || 'Main Contract',
+              owner: networkData.owner || networkData.deployer || '',
+              deploymentId: `${network}-main`
+            };
+            contracts.push(cleanContract);
+            totalDeployments++;
+          }
+          
+          // Check for nested contract deployments
+          Object.keys(networkData).forEach(key => {
+            const item = networkData[key];
+            // If the item is an object with contractAddress, it's a nested deployment
+            if (typeof item === 'object' && item && item.contractAddress && key !== 'contractAddress') {
+              contracts.push({
+                contractAddress: item.contractAddress,
+                network: item.network || network,
+                blockNumber: item.blockNumber || 0,
+                transactionHash: item.transactionHash || '',
+                deployedAt: item.deployedAt || '',
+                deployer: item.deployer || '',
+                contractName: item.contractName || key,
+                owner: item.owner || item.deployer || '',
+                deploymentId: `${network}-${key}`
+              });
+              totalDeployments++;
+            }
+          });
+        });
+        
+        res.json({
+          success: true,
+          deployments: deployments,
+          contracts: contracts,
+          total_deployments: totalDeployments,
+          networks: Object.keys(deployments),
+          summary: {
+            networks_with_deployments: Object.keys(deployments).length,
+            total_contracts: contracts.length,
+            latest_deployment: contracts.length > 0 ? 
+              contracts.reduce((latest, current) => 
+                new Date(current.deployedAt) > new Date(latest.deployedAt) ? current : latest
+              ) : null
+          }
+        });
+      } catch (parseError) {
+        console.error('Error parsing deployments JSON:', parseError);
+        res.status(500).json({
+          success: false,
+          error: 'Failed to parse deployments file',
+          message: 'The deployments file contains invalid JSON structure'
+        });
+      }
     } else {
       res.json({
         deployments: {},
-        message: 'Could not parse deployments file'
+        contracts: [],
+        total_deployments: 0,
+        message: 'Could not parse deployments file - no valid export found'
       });
     }
   } catch (error: any) {
+    console.error('Error reading deployments:', error);
     res.status(500).json({
+      success: false,
       error: 'Failed to read deployments',
       message: error.message
     });
@@ -735,7 +601,7 @@ router.get('/bulk-generator', (req: Request, res: Response) => {
 // Route to get deployment information
 router.get('/deployment-info', (req: Request, res: Response) => {
   const deploymentInfo = {
-    current_network: process.env.HARDHAT_NETWORK || "localhost",
+    current_network: process.env.HARDHAT_NETWORK || "apothem",
     contract_address: process.env.CONTRACT_ADDRESS || "Not set",
     supported_networks: ["localhost", "apothem", "xdc"],
     deployment_scripts: [

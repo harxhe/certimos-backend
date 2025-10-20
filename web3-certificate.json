@@ -1,0 +1,31 @@
+{
+  "recipientAddress": "0x1bdAe98049aaAc9faDF4E302219A4e6a47c4A2f9",
+  "name": "Web3 Development Excellence Certificate",
+  "description": "Certificate awarded for demonstrating exceptional skills in Web3 development, blockchain technology, and decentralized application architecture.",
+  "image": "https://i.pinimg.com/1200x/49/a7/d1/49a7d1759a491d2e33df4d16db623e6a.jpg",
+  "attributes": [
+    {
+      "trait_type": "Achievement",
+      "value": "Web3 Development Excellence"
+    },
+    {
+      "trait_type": "Date Issued",
+      "value": "2024-09-23"
+    },
+    {
+      "trait_type": "Level", 
+      "value": "Advanced"
+    },
+    {
+      "trait_type": "Skills",
+      "value": "Blockchain, Smart Contracts, DeFi"
+    },
+    {
+      "trait_type": "Issuer",
+      "value": "Certimos Platform"
+    }
+  ],
+  "category": "Excellence",
+  "rarity": "Epic",
+  "points": 750
+}

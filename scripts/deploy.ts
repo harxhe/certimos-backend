@@ -139,7 +139,7 @@ async function main() {
       network: networkName,
       transactionHash: deployTx?.hash || '',
       deployedAt: new Date().toISOString(),
-      deployer: deployer.address,
+      deployer: ownerAddress, // Use the wallet address passed from frontend, not the signer
       contractName: contractName,
       owner: ownerAddress
   };

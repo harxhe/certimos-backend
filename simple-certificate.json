@@ -1,0 +1,27 @@
+{
+  "recipientAddress": "0xaaCaE99d6E2Bf87813233e3d46EB48c9f796016C",
+  "name": "TechCon 2024 - Blockchain Certificate",
+  "description": "Certificate for blockchain innovation achievements.",
+  "image": "https://i.pinimg.com/736x/eb/d7/d7/ebd7d77aa9dd837cfb748f7ca5a2769f.jpg",
+  "attributes": [
+    {
+      "trait_type": "Event",
+      "value": "TechCon 2024"
+    },
+    {
+      "trait_type": "Recipient",
+      "value": "Sarah Williams"
+    },
+    {
+      "trait_type": "Level",
+      "value": "Expert"
+    },
+    {
+      "trait_type": "Skill",
+      "value": "Blockchain"
+    }
+  ],
+  "category": "Excellence",
+  "rarity": "Rare",
+  "points": 650
+}

@@ -55,16 +55,16 @@ export class CertificateController {
   private contract: ethers.Contract | null = null;
   private wallet: ethers.Wallet | null = null;
   private contractWithSigner: ethers.Contract | null = null;
+  private currentContractAddress: string | null = null;
 
-  private initializeContract() {
-    if (!this.provider || !this.contract) {
+  private initializeContract(contractAddress?: string) {
+    // Use provided address or a default one for backwards compatibility
+    const targetContractAddress = contractAddress || process.env.DEFAULT_CONTRACT_ADDRESS || '0x9b40c3c0656434fd89bC50671a29d1814EDA8079';
+    
+    if (!this.provider || !this.contract || this.currentContractAddress !== targetContractAddress) {
       console.log('🔧 Initializing blockchain connection...');
-      console.log('📍 CONTRACT_ADDRESS:', process.env.CONTRACT_ADDRESS);
+      console.log('📍 Target Contract Address:', targetContractAddress);
       console.log('🌐 APOTHEM_RPC_URL:', process.env.APOTHEM_RPC_URL);
-      
-      if (!process.env.CONTRACT_ADDRESS) {
-        throw new Error('CONTRACT_ADDRESS environment variable is not set');
-      }
       
       if (!process.env.APOTHEM_RPC_URL) {
         throw new Error('APOTHEM_RPC_URL environment variable is not set');
@@ -72,28 +72,31 @@ export class CertificateController {
       
       this.provider = new ethers.JsonRpcProvider(process.env.APOTHEM_RPC_URL);
       this.contract = new ethers.Contract(
-        process.env.CONTRACT_ADDRESS!,
+        targetContractAddress,
         contractABI,
         this.provider
       );
       
+      this.currentContractAddress = targetContractAddress;
       console.log('✅ Blockchain connection initialized successfully');
     }
   }
 
-  private initializeContractWithSigner() {
-    if (!this.contractWithSigner || !this.wallet) {
+  private initializeContractWithSigner(contractAddress?: string) {
+    const targetContractAddress = contractAddress || this.currentContractAddress || process.env.DEFAULT_CONTRACT_ADDRESS || '0x9b40c3c0656434fd89bC50671a29d1814EDA8079';
+    
+    if (!this.contractWithSigner || !this.wallet || this.currentContractAddress !== targetContractAddress) {
       console.log('🔧 Initializing contract with signer for transactions...');
       
       if (!process.env.PRIVATE_KEY) {
         throw new Error('PRIVATE_KEY environment variable is not set');
       }
       
-      this.initializeContract(); // Ensure provider and contract are initialized
+      this.initializeContract(contractAddress); // Ensure provider and contract are initialized with the right address
       
       this.wallet = new ethers.Wallet(process.env.PRIVATE_KEY!, this.provider!);
       this.contractWithSigner = new ethers.Contract(
-        process.env.CONTRACT_ADDRESS!,
+        targetContractAddress,
         contractABI,
         this.wallet
       );
@@ -104,9 +107,9 @@ export class CertificateController {
   }
 
   // Certificate valuation logic
-  private calculateCertificateValue(tokenId: number, metadata: any, tokenURI: string): { points: number; rarity: string; category: string } {
+  private calculateCertificateValue(tokenId: number, metadata: any, tokenURI: string, userProvidedRarity?: string): { points: number; rarity: string; category: string } {
     let points = 0;
-    let rarity = 'Common';
+    let rarity = userProvidedRarity || 'Common'; // Respect user-provided rarity if available
     let category = 'General';
 
     // Base points for having a certificate
@@ -175,15 +178,17 @@ export class CertificateController {
       points += 100;
     }
 
-    // Rarity adjustment based on final points
-    if (points >= 800) {
-      rarity = 'Legendary';
-    } else if (points >= 600) {
-      rarity = 'Epic';
-    } else if (points >= 400) {
-      rarity = 'Rare';
-    } else if (points >= 250) {
-      rarity = 'Uncommon';
+    // Rarity adjustment based on final points (only if no user-provided rarity)
+    if (!userProvidedRarity) {
+      if (points >= 800) {
+        rarity = 'Legendary';
+      } else if (points >= 600) {
+        rarity = 'Epic';
+      } else if (points >= 400) {
+        rarity = 'Rare';
+      } else if (points >= 250) {
+        rarity = 'Uncommon';
+      }
     }
 
     return { points, rarity, category };
@@ -194,15 +199,24 @@ export class CertificateController {
   try {
     const { walletAddress } = req.params;
     
+    console.log(`🔍 Fetching certificates for wallet: ${walletAddress}`);
+    
     if (!walletAddress.match(/^0x[a-fA-F0-9]{40}$/)) {
-      return res.status(400).json({ error: 'Invalid wallet address format' });
+      return res.status(400).json({ 
+        success: false,
+        error: 'Invalid wallet address format' 
+      });
     }
 
-    this.initializeContract();
+    this.initializeContract('0x9b40c3c0656434fd89bC50671a29d1814EDA8079'); // Use default contract for backwards compatibility
 
     // Early exit if no certificates
     const balance = await this.contract!.balanceOf(walletAddress);
-    if (balance.toString() === '0') {
+    const balanceNum = parseInt(balance.toString());
+    
+    console.log(`📊 Wallet balance: ${balanceNum} certificates`);
+    
+    if (balanceNum === 0) {
       return res.json({
         success: true,
         walletAddress,
@@ -210,15 +224,25 @@ export class CertificateController {
         count: 0,
         balance: '0',
         network: 'XDC Apothem',
-        contractAddress: process.env.CONTRACT_ADDRESS
+        contractAddress: this.currentContractAddress || 'Dynamic - multiple contracts supported',
+        totalPoints: 0,
+        valueBreakdown: {
+          totalCertificates: 0,
+          totalPoints: 0,
+          averagePoints: 0,
+          rarityDistribution: {},
+          categoryDistribution: {}
+        }
       });
     }
 
     const certificates: CertificateData[] = [];
-    const maxTokensToCheck = 100;
-    const batchSize = 10;
+    const maxTokensToCheck = Math.min(50, balanceNum * 5); // Reduce from 200 to 50
+    const batchSize = 3; // Reduce from 5 to 3
     
-    // Process in parallel batches
+    console.log(`🔄 Checking up to ${maxTokensToCheck} tokens in batches of ${batchSize}`);
+    
+    // Process in parallel batches with better error handling
     for (let i = 0; i < maxTokensToCheck; i += batchSize) {
       const tokenPromises: Promise<CertificateData | null>[] = [];
       
@@ -226,17 +250,31 @@ export class CertificateController {
         tokenPromises.push(this.checkTokenOwnership(tokenId, walletAddress));
       }
       
-      const batchResults = await Promise.allSettled(tokenPromises);
-      
-      batchResults.forEach((result) => {
-        if (result.status === 'fulfilled' && result.value) {
-          certificates.push(result.value);
-        }
-      });
+      try {
+        const batchResults = await Promise.allSettled(tokenPromises);
+        
+        batchResults.forEach((result, index) => {
+          if (result.status === 'fulfilled' && result.value) {
+            certificates.push(result.value);
+            console.log(`✅ Found certificate: Token ${i + index}`);
+          } else if (result.status === 'rejected') {
+            console.warn(`⚠️ Failed to check token ${i + index}:`, result.reason);
+          }
+        });
+      } catch (batchError) {
+        console.error(`❌ Batch error for tokens ${i}-${i + batchSize - 1}:`, batchError);
+        continue; // Continue with next batch
+      }
 
       // Early exit when found all certificates
-      if (certificates.length === parseInt(balance.toString())) {
+      if (certificates.length >= balanceNum) {
+        console.log(`✅ Found all ${balanceNum} certificates, stopping search`);
         break;
+      }
+      
+      // Add small delay between batches to avoid overwhelming the RPC
+      if (i + batchSize < maxTokensToCheck) {
+        await new Promise(resolve => setTimeout(resolve, 100));
       }
     }
 
@@ -260,7 +298,7 @@ export class CertificateController {
       count: certificates.length,
       balance: balance.toString(),
       network: 'XDC Apothem',
-      contractAddress: process.env.CONTRACT_ADDRESS,
+      contractAddress: this.currentContractAddress || 'Dynamic - multiple contracts supported',
       totalPoints,
       valueBreakdown: {
         totalCertificates: certificates.length,
@@ -271,6 +309,7 @@ export class CertificateController {
       }
     };
 
+    console.log(`✅ Successfully fetched ${certificates.length} certificates with ${totalPoints} total points`);
     res.json(result);
 
   } catch (error) {
@@ -294,19 +333,41 @@ async checkTokenOwnership(tokenId: number, walletAddress: string): Promise<Certi
       try {
         tokenURI = await this.contract!.tokenURI(tokenId);
         
-        // Try to fetch metadata
+        // Try to fetch metadata with timeout
         if (tokenURI) {
           if (tokenURI.startsWith('http')) {
-            const response = await fetch(tokenURI);
-            metadata = await response.json();
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 3000); // Reduce from 5s to 3s
+            
+            try {
+              const response = await fetch(tokenURI, { 
+                signal: controller.signal,
+                headers: {
+                  'Accept': 'application/json',
+                  'User-Agent': 'Certimos-Backend/1.0'
+                }
+              });
+              clearTimeout(timeoutId);
+              
+              if (response.ok) {
+                metadata = await response.json();
+              } else {
+                console.warn(`Failed to fetch metadata for token ${tokenId}: ${response.status}`);
+              }
+            } catch (fetchError) {
+              clearTimeout(timeoutId);
+              const errorMessage = fetchError instanceof Error ? fetchError.message : 'Unknown error';
+              console.warn(`Metadata fetch timeout/error for token ${tokenId}:`, errorMessage);
+            }
           } else if (tokenURI.startsWith('data:application/json')) {
             const base64Data = tokenURI.split(',')[1];
             const jsonString = Buffer.from(base64Data, 'base64').toString();
             metadata = JSON.parse(jsonString);
           }
         }
-      } catch (error) {
-        console.warn(`Could not get URI/metadata for token ${tokenId}`);
+      } catch (uriError) {
+        const errorMessage = uriError instanceof Error ? uriError.message : 'Unknown error';
+        console.warn(`Could not get URI/metadata for token ${tokenId}:`, errorMessage);
       }
 
       // Calculate certificate value
@@ -329,6 +390,7 @@ async checkTokenOwnership(tokenId: number, walletAddress: string): Promise<Certi
     
     return null;
   } catch (error) {
+    // Token doesn't exist or other error - this is normal
     return null;
   }
 }
@@ -343,7 +405,7 @@ async checkTokenOwnership(tokenId: number, walletAddress: string): Promise<Certi
         return res.status(400).json({ error: 'Invalid wallet address format' });
       }
 
-      this.initializeContract();
+      this.initializeContract('0x9b40c3c0656434fd89bC50671a29d1814EDA8079'); // Use default contract for backwards compatibility
 
       // Count certificates owned by the user
       const balance = await this.contract!.balanceOf(walletAddress);
@@ -381,7 +443,7 @@ async checkTokenOwnership(tokenId: number, walletAddress: string): Promise<Certi
         totalSupply: certificateCount,
         totalPoints,
         walletAddress,
-        contractAddress: process.env.CONTRACT_ADDRESS
+        contractAddress: this.currentContractAddress || 'Dynamic - multiple contracts supported'
       });
     } catch (error) {
       console.error('❌ Error getting user certificate count:', error);
@@ -395,7 +457,51 @@ async checkTokenOwnership(tokenId: number, walletAddress: string): Promise<Certi
   // Mint a single certificate
   async mintCertificate(req: Request, res: Response) {
     try {
-      const { recipientAddress, name, description, image, attributes } = req.body;
+      const { 
+        recipientAddress, 
+        name, 
+        description, 
+        attributes, 
+        rarity, 
+        category, 
+        points, 
+        skills, 
+        level, 
+        eventName, 
+        certificateName,
+        customAttributes,
+        contractAddress // Optional contract address
+      } = req.body;
+
+      // Handle uploaded image file
+      let imageUrl = null;
+      if (req.file) {
+        // For now, we'll store the local file path. In production, you'd upload to IPFS or cloud storage
+        imageUrl = `/uploads/${req.file.filename}`;
+      }
+
+      // Parse custom attributes if provided
+      let parsedCustomAttributes = [];
+      if (customAttributes) {
+        try {
+          parsedCustomAttributes = JSON.parse(customAttributes);
+        } catch (error) {
+          console.log('Invalid custom attributes format, using empty array');
+        }
+      }
+
+      // Parse existing attributes if provided
+      let parsedAttributes = [];
+      if (attributes) {
+        try {
+          parsedAttributes = JSON.parse(attributes);
+        } catch (error) {
+          console.log('Invalid attributes format, using empty array');
+        }
+      }
+
+      // Combine all attributes
+      const allAttributes = [...parsedAttributes, ...parsedCustomAttributes];
       
       // Validate required fields
       if (!recipientAddress || !name) {
@@ -409,8 +515,55 @@ async checkTokenOwnership(tokenId: number, walletAddress: string): Promise<Certi
         return res.status(400).json({ error: 'Invalid recipient wallet address format' });
       }
 
-      this.initializeContract();
-      this.initializeContractWithSigner();
+      // Use default contract address if none provided
+      const targetContractAddress = contractAddress || '0x9b40c3c0656434fd89bC50671a29d1814EDA8079';
+
+      this.initializeContract(targetContractAddress);
+      this.initializeContractWithSigner(targetContractAddress);
+
+      // 🚫 CHECK FOR DUPLICATE CERTIFICATES
+      console.log(`🔍 Checking for duplicate certificates for ${recipientAddress}...`);
+      const balance = await this.contract!.balanceOf(recipientAddress);
+      
+      if (balance.toString() !== '0') {
+        // Check existing certificates for duplicates
+        const maxTokensToCheck = 100;
+        for (let tokenId = 0; tokenId < maxTokensToCheck; tokenId++) {
+          try {
+            const owner = await this.contract!.ownerOf(tokenId);
+            if (owner.toLowerCase() === recipientAddress.toLowerCase()) {
+              // Get existing certificate metadata
+              const existingTokenURI = await this.contract!.tokenURI(tokenId);
+              let existingMetadata = null;
+              
+              if (existingTokenURI.startsWith('data:application/json')) {
+                const base64Data = existingTokenURI.split(',')[1];
+                const jsonString = Buffer.from(base64Data, 'base64').toString();
+                existingMetadata = JSON.parse(jsonString);
+              }
+              
+              // Check if certificate with same name already exists
+              if (existingMetadata && existingMetadata.name === name) {
+                console.log(`❌ Duplicate certificate detected! "${name}" already exists for ${recipientAddress}`);
+                return res.status(409).json({
+                  success: false,
+                  error: 'Duplicate certificate detected',
+                  message: `A certificate with the name "${name}" already exists for this wallet address.`,
+                  existingCertificate: {
+                    tokenId: tokenId.toString(),
+                    name: existingMetadata.name,
+                    issuedAt: existingMetadata.issuedAt
+                  }
+                });
+              }
+            }
+          } catch (error) {
+            // Token doesn't exist or error fetching, continue
+          }
+        }
+      }
+      
+      console.log(`✅ No duplicate certificates found. Proceeding with minting...`);
 
       // Get next token ID by checking current supply
       let nextTokenId = 0;
@@ -427,15 +580,27 @@ async checkTokenOwnership(tokenId: number, walletAddress: string): Promise<Certi
         }
       }
 
-      // Create metadata object
+      // Create metadata object with enhanced properties
       const metadata = {
         name: name,
         description: description || `Certificate #${nextTokenId}`,
-        image: image || null,
-        attributes: attributes || [],
+        image: imageUrl,
+        attributes: allAttributes,
         tokenId: nextTokenId,
         issuedAt: new Date().toISOString(),
-        issuer: "Certimos Platform"
+        issuer: "Certimos Platform",
+        // Enhanced metadata fields
+        category: category || "General",
+        rarity: rarity || "Common",
+        points: parseInt(points) || 100,
+        skills: skills || "",
+        level: level || "",
+        eventName: eventName || "",
+        certificateName: certificateName || name,
+        // Additional metadata
+        certificateType: "Achievement",
+        blockchain: "XDC Network",
+        standard: "ERC-721"
       };
 
       // Create a data URI for metadata
@@ -466,8 +631,8 @@ async checkTokenOwnership(tokenId: number, walletAddress: string): Promise<Certi
         const receipt = await tx.wait();
         console.log('✅ Transaction confirmed! Block:', receipt.blockNumber);
 
-        // Calculate certificate value for response
-        const valuation = this.calculateCertificateValue(nextTokenId, metadata, tokenURI);
+        // Calculate certificate value for response (respecting user-provided rarity)
+        const valuation = this.calculateCertificateValue(nextTokenId, metadata, tokenURI, rarity);
 
         res.json({
           success: true,
@@ -484,7 +649,8 @@ async checkTokenOwnership(tokenId: number, walletAddress: string): Promise<Certi
             rarity: valuation.rarity,
             category: valuation.category,
             gasUsed: receipt.gasUsed.toString(),
-            from: this.wallet!.address
+            from: this.wallet!.address,
+            contractAddress: targetContractAddress
           }
         });
 
@@ -526,7 +692,7 @@ async checkTokenOwnership(tokenId: number, walletAddress: string): Promise<Certi
       
       console.log(`Verifying certificate with token ID: ${tokenId}`);
       
-      this.initializeContract();
+      this.initializeContract('0x9b40c3c0656434fd89bC50671a29d1814EDA8079'); // Use default contract for backwards compatibility
       
       const owner = await this.contract!.ownerOf(tokenId);
       const tokenURI = await this.contract!.tokenURI(tokenId);
@@ -575,6 +741,126 @@ async checkTokenOwnership(tokenId: number, walletAddress: string): Promise<Certi
         valid: false,
         message: 'Certificate not found on blockchain',
         verifiedAt: new Date().toISOString()
+      });
+    }
+  }
+
+  // Transfer a certificate to another address
+  async transferCertificate(req: Request, res: Response) {
+    try {
+      const { tokenId, fromAddress, toAddress } = req.body;
+      
+      // Validate required fields
+      if (!tokenId || !fromAddress || !toAddress) {
+        return res.status(400).json({ 
+          error: 'Missing required fields: tokenId, fromAddress, and toAddress are required' 
+        });
+      }
+
+      // Validate wallet address formats
+      if (!fromAddress.match(/^0x[a-fA-F0-9]{40}$/)) {
+        return res.status(400).json({ error: 'Invalid fromAddress wallet format' });
+      }
+      
+      if (!toAddress.match(/^0x[a-fA-F0-9]{40}$/)) {
+        return res.status(400).json({ error: 'Invalid toAddress wallet format' });
+      }
+
+      this.initializeContract('0x9b40c3c0656434fd89bC50671a29d1814EDA8079'); // Use default contract for backwards compatibility
+      this.initializeContractWithSigner('0x9b40c3c0656434fd89bC50671a29d1814EDA8079');
+
+      // Verify the token exists and get current owner
+      let currentOwner;
+      try {
+        currentOwner = await this.contract!.ownerOf(tokenId);
+      } catch (error) {
+        return res.status(404).json({
+          success: false,
+          error: 'Certificate not found',
+          message: `Token ID ${tokenId} does not exist`
+        });
+      }
+
+      // Verify the fromAddress matches the current owner
+      if (currentOwner.toLowerCase() !== fromAddress.toLowerCase()) {
+        return res.status(403).json({
+          success: false,
+          error: 'Unauthorized transfer',
+          message: `Token ${tokenId} is owned by ${currentOwner}, not ${fromAddress}`
+        });
+      }
+
+      // Get certificate metadata before transfer
+      const tokenURI = await this.contract!.tokenURI(tokenId);
+      let metadata = null;
+      
+      if (tokenURI.startsWith('data:application/json')) {
+        const base64Data = tokenURI.split(',')[1];
+        const jsonString = Buffer.from(base64Data, 'base64').toString();
+        metadata = JSON.parse(jsonString);
+      }
+
+      console.log(`🔄 Transferring certificate #${tokenId} from ${fromAddress} to ${toAddress}`);
+      console.log(`📄 Certificate: ${metadata?.name || 'Unknown'}`);
+
+      // Execute the transfer using safeTransferFrom
+      try {
+        console.log('💫 Sending transfer transaction to blockchain...');
+        
+        const gasLimit = 500000;
+        const gasPrice = ethers.parseUnits('25', 'gwei');
+        
+        const tx = await this.contractWithSigner!['safeTransferFrom(address,address,uint256)'](
+          fromAddress, 
+          toAddress, 
+          tokenId,
+          {
+            gasLimit: gasLimit,
+            gasPrice: gasPrice
+          }
+        );
+        
+        console.log('📡 Transfer transaction sent! Hash:', tx.hash);
+        
+        // Wait for transaction confirmation
+        console.log('⏳ Waiting for transfer confirmation...');
+        const receipt = await tx.wait();
+        console.log('✅ Transfer confirmed! Block:', receipt.blockNumber);
+
+        res.json({
+          success: true,
+          message: 'Certificate transferred successfully!',
+          transfer: {
+            tokenId: tokenId.toString(),
+            from: fromAddress,
+            to: toAddress,
+            certificateName: metadata?.name || `Certificate #${tokenId}`,
+            transactionHash: tx.hash,
+            blockNumber: receipt.blockNumber,
+            gasUsed: receipt.gasUsed.toString()
+          }
+        });
+
+      } catch (transferError: any) {
+        console.error('❌ Error during transfer:', transferError);
+        
+        if (transferError.message?.includes('insufficient funds')) {
+          return res.status(400).json({
+            success: false,
+            error: 'Insufficient funds for gas fees',
+            message: 'The wallet does not have enough XDC for gas fees'
+          });
+        }
+        
+        throw transferError;
+      }
+
+    } catch (error) {
+      console.error('❌ Error transferring certificate:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Failed to transfer certificate',
+        message: error instanceof Error ? error.message : 'Internal server error'
       });
     }
   }

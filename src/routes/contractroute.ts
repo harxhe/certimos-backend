@@ -52,13 +52,83 @@ const router = Router();
 // Function to run the deploy.ts script
 // (Multer configuration and other routes remain unchanged...)
 
+// Single certificate minting route
+router.post('/mint-single-certificate', upload.single('certificateImage'), async (req: any, res: Response) => {
+  try {
+    console.log('🚀 Starting single certificate minting...');
+    console.log('Request body:', req.body);
+    console.log('Uploaded file:', req.file);
+
+    const {
+      contractAddress,
+      eventName,
+      certificateName,
+      recipientName,
+      recipientWallet,
+      description,
+      category,
+      rarity,
+      points,
+      skills,
+      customAttributes
+    } = req.body;
+
+    // Validate required fields
+    if (!contractAddress || !eventName || !certificateName || !recipientName || !recipientWallet) {
+      return res.status(400).json({
+        error: 'Missing required fields',
+        required: ['contractAddress', 'eventName', 'certificateName', 'recipientName', 'recipientWallet']
+      });
+    }
+
+    // Create temporary CSV for single recipient
+    const tempDir = path.join(process.cwd(), 'temp');
+    if (!fs.existsSync(tempDir)) {
+      fs.mkdirSync(tempDir, { recursive: true });
+    }
+    
+    const csvContent = `participant_name,wallet_address\n${recipientName},${recipientWallet}`;
+    const csvFile = path.join(tempDir, `single-recipient-${Date.now()}.csv`);
+    fs.writeFileSync(csvFile, csvContent);
+
+    // Call the auto-minting function with the temporary CSV
+    const result = await autoMintCertificatesFromCSV(
+      csvFile, 
+      contractAddress, 
+      eventName, 
+      certificateName
+    );
+
+    // Clean up temporary CSV
+    if (fs.existsSync(csvFile)) {
+      fs.unlinkSync(csvFile);
+    }
+
+    if (result.success) {
+      res.status(200).json({
+        message: `Certificate minted successfully for ${recipientName}!`,
+        result: result.results && result.results.length > 0 ? result.results[0] : null
+      });
+    } else {
+      res.status(500).json({
+        error: result.error || 'Failed to mint certificate'
+      });
+    }
+
+  } catch (error) {
+    console.error('❌ Error in single certificate minting:', error);
+    res.status(500).json({
+      error: 'Internal server error during certificate minting',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
 // Enhanced route to auto-mint certificates with IPFS/Pinata upload
 router.post('/auto-mint-with-ipfs', upload.single('csvFile'), async (req: any, res: Response) => {
   try {
     let csvFile: string;
     let imageFile: string;
-
-
 
     // Handle different input scenarios
     if (req.file) {
@@ -89,7 +159,13 @@ router.post('/auto-mint-with-ipfs', upload.single('csvFile'), async (req: any, r
     const contactName = req.body.contractName;
     const eventName = req.body.eventName;
     const certificateName = req.body.certificateName;
-    const contractAddress = await fetchcontract(contactName);
+    const contractAddress = req.body.contractAddress || await fetchcontract(contactName);
+
+    if (!contractAddress) {
+      return res.status(400).json({
+        error: 'Contract address not found. Please provide contractAddress or valid contractName.'
+      });
+    }
 
     console.log('🚀 Starting enhanced automatic certificate minting with IPFS/Pinata upload...');
     

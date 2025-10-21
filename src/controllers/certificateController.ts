@@ -44,16 +44,35 @@ dotenv.config();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Find project root by looking for package.json
+// Find project root by looking for our specific package.json
 let projectRoot = __dirname;
 console.log('Starting search from __dirname:', __dirname);
 
-while (!fs.existsSync(path.join(projectRoot, 'package.json'))) {
+while (true) {
+  const packageJsonPath = path.join(projectRoot, 'package.json');
+  console.log('Checking for package.json in:', projectRoot);
+  
+  if (fs.existsSync(packageJsonPath)) {
+    try {
+      const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
+      console.log('Found package.json with name:', packageJson.name);
+      
+      // Check if this is our backend package.json
+      if (packageJson.name === 'certimos-backend') {
+        console.log('Found certimos-backend package.json at:', projectRoot);
+        break;
+      }
+    } catch (error) {
+      console.log('Error reading package.json:', error instanceof Error ? error.message : String(error));
+    }
+  }
+  
   const parentDir = path.resolve(projectRoot, '..');
-  console.log('Checking for package.json in:', projectRoot, '- Not found, moving to:', parentDir);
+  console.log('Moving to parent directory:', parentDir);
+  
   if (parentDir === projectRoot) {
-    // Reached the root directory without finding package.json
-    throw new Error('Could not find project root (package.json not found)');
+    // Reached the root directory without finding our package.json
+    throw new Error('Could not find certimos-backend package.json');
   }
   projectRoot = parentDir;
 }

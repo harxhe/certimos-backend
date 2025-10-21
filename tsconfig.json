@@ -6,9 +6,10 @@
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
+    "typeRoots": ["./node_modules/@types"],
     "moduleResolution": "node16",
     "outDir": "dist",
-    "types": ["node"],
+
     "allowSyntheticDefaultImports": true,
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true

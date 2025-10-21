@@ -17,7 +17,9 @@
     "ipfs-http-client": "^60.0.1",
     "morgan": "^1.10.1",
     "multer": "^2.0.2",
-    "nodemon": "^3.1.10"
+    "nodemon": "^3.1.10",
+    "@types/node": "^22.8.5",
+    "typescript": "~5.8.0"
   },
   "devDependencies": {
     "@nomicfoundation/hardhat-ethers": "^4.0.0",

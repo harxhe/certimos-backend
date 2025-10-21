@@ -46,8 +46,11 @@ const __dirname = path.dirname(__filename);
 
 // Find project root by looking for package.json
 let projectRoot = __dirname;
+console.log('Starting search from __dirname:', __dirname);
+
 while (!fs.existsSync(path.join(projectRoot, 'package.json'))) {
   const parentDir = path.resolve(projectRoot, '..');
+  console.log('Checking for package.json in:', projectRoot, '- Not found, moving to:', parentDir);
   if (parentDir === projectRoot) {
     // Reached the root directory without finding package.json
     throw new Error('Could not find project root (package.json not found)');
@@ -55,7 +58,9 @@ while (!fs.existsSync(path.join(projectRoot, 'package.json'))) {
   projectRoot = parentDir;
 }
 
+console.log('Found project root:', projectRoot);
 const contractArtifactPath = path.join(projectRoot, 'artifacts', 'contracts', 'Certificate.sol', 'Certificate.json');
+console.log('Contract artifact path:', contractArtifactPath);
 let contractABI: any;
 
 try {

@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { ethers } from 'ethers';
+import axios from 'axios';
 import fs from 'fs';
 import path from 'path';
 import dotenv from 'dotenv';
@@ -58,8 +59,11 @@ export class CertificateController {
   private currentContractAddress: string | null = null;
 
   private initializeContract(contractAddress?: string) {
-    // Use provided address or a default one for backwards compatibility
-    const targetContractAddress = contractAddress || process.env.DEFAULT_CONTRACT_ADDRESS || '0x9b40c3c0656434fd89bC50671a29d1814EDA8079';
+    // Contract address must be provided - no defaults in dynamic system
+    if (!contractAddress) {
+      throw new Error('Contract address is required for initialization');
+    }
+    const targetContractAddress = contractAddress;
     
     if (!this.provider || !this.contract || this.currentContractAddress !== targetContractAddress) {
       console.log('🔧 Initializing blockchain connection...');
@@ -83,7 +87,10 @@ export class CertificateController {
   }
 
   private initializeContractWithSigner(contractAddress?: string) {
-    const targetContractAddress = contractAddress || this.currentContractAddress || process.env.DEFAULT_CONTRACT_ADDRESS || '0x9b40c3c0656434fd89bC50671a29d1814EDA8079';
+    const targetContractAddress = contractAddress || this.currentContractAddress;
+    if (!targetContractAddress) {
+      throw new Error('Contract address is required for transaction initialization');
+    }
     
     if (!this.contractWithSigner || !this.wallet || this.currentContractAddress !== targetContractAddress) {
       console.log('🔧 Initializing contract with signer for transactions...');
@@ -106,88 +113,71 @@ export class CertificateController {
     }
   }
 
-  // Certificate valuation logic
+  // Certificate valuation logic - Simple rarity-based system
   private calculateCertificateValue(tokenId: number, metadata: any, tokenURI: string, userProvidedRarity?: string): { points: number; rarity: string; category: string } {
     let points = 0;
-    let rarity = userProvidedRarity || 'Common'; // Respect user-provided rarity if available
+    let rarity = 'Common';
     let category = 'General';
 
-    // Base points for having a certificate
-    points += 100;
-
-    // Points based on token ID (earlier certificates are rarer)
-    if (tokenId < 10) {
-      points += 500;
-      rarity = 'Legendary';
-    } else if (tokenId < 50) {
-      points += 200;
-      rarity = 'Rare';
-    } else if (tokenId < 100) {
-      points += 50;
-      rarity = 'Uncommon';
-    }
-
-    // Points based on metadata (if available)
-    if (metadata) {
-      // Points for having rich metadata
-      points += 50;
-      
-      // Category-based points
-      const name = (metadata.name || '').toLowerCase();
-      const description = (metadata.description || '').toLowerCase();
-      
-      if (name.includes('achievement') || description.includes('achievement')) {
-        category = 'Achievement';
-        points += 150;
-      } else if (name.includes('completion') || description.includes('completion')) {
-        category = 'Completion';
-        points += 200;
-      } else if (name.includes('excellence') || description.includes('excellence')) {
-        category = 'Excellence';
-        points += 300;
-      } else if (name.includes('mastery') || description.includes('mastery')) {
-        category = 'Mastery';
-        points += 400;
-      }
-
-      // Points for attributes
-      if (metadata.attributes && Array.isArray(metadata.attributes)) {
-        points += metadata.attributes.length * 25;
-        
-        // Bonus for special attributes
-        for (const attr of metadata.attributes) {
-          if (attr.trait_type && attr.value) {
-            const traitType = attr.trait_type.toLowerCase();
-            if (traitType.includes('grade') || traitType.includes('score')) {
-              if (typeof attr.value === 'string' && attr.value.toLowerCase().includes('a')) {
-                points += 100;
-              }
-            }
-          }
+    // Check if rarity and points are stored in metadata attributes (from new certificates)
+    if (metadata && metadata.attributes && Array.isArray(metadata.attributes)) {
+      // Look for rarity and points in attributes
+      for (const attr of metadata.attributes) {
+        if (attr.trait_type === 'Rarity' && attr.value) {
+          rarity = attr.value;
+        }
+        if (attr.trait_type === 'Points' && attr.value) {
+          points = parseInt(attr.value) || 0;
+        }
+        if (attr.trait_type === 'Category' && attr.value) {
+          category = attr.value;
         }
       }
+    }
 
-      // Points for having an image
-      if (metadata.image) {
-        points += 75;
+    // If no points found in metadata, calculate based on rarity
+    if (points === 0) {
+      switch (rarity.toLowerCase()) {
+        case 'legendary':
+          points = 500;
+          break;
+        case 'epic':
+          points = 400;
+          break;
+        case 'rare':
+          points = 300;
+          break;
+        case 'uncommon':
+          points = 200;
+          break;
+        case 'common':
+        default:
+          points = 100;
+          break;
       }
     }
 
-    // IPFS bonus (indicates proper metadata storage)
-    if (tokenURI.includes('ipfs://')) {
-      points += 100;
-    }
-
-    // Rarity adjustment based on final points (only if no user-provided rarity)
-    if (!userProvidedRarity) {
-      if (points >= 800) {
-        rarity = 'Legendary';
-      } else if (points >= 600) {
-        rarity = 'Epic';
-      } else if (points >= 400) {
-        rarity = 'Rare';
-      } else if (points >= 250) {
-        rarity = 'Uncommon';
+    // Use user-provided rarity if available (for backward compatibility)
+    if (userProvidedRarity) {
+      rarity = userProvidedRarity;
+      // Recalculate points for user-provided rarity
+      switch (userProvidedRarity.toLowerCase()) {
+        case 'legendary':
+          points = 500;
+          break;
+        case 'epic':
+          points = 400;
+          break;
+        case 'rare':
+          points = 300;
+          break;
+        case 'uncommon':
+          points = 200;
+          break;
+        case 'common':
+        default:
+          points = 100;
+          break;
       }
     }
 
@@ -322,7 +312,113 @@ export class CertificateController {
   }
 }
 
-async checkTokenOwnership(tokenId: number, walletAddress: string): Promise<CertificateData | null> {
+  // Helper method to fix localhost image URLs
+  private fixImageUrl(imageUrl: string | null): string | null {
+    if (!imageUrl) return null;
+    
+    // Fix localhost:3000 URLs to use backend port
+    if (imageUrl.includes('localhost:3000/uploads/')) {
+      const backendUrl = `http://localhost:${process.env.PORT || 5000}`;
+      return imageUrl.replace('http://localhost:3000', backendUrl);
+    }
+    
+    return imageUrl;
+  }
+
+  // Check token ownership with a specific contract instance (for multi-contract support)
+  async checkTokenOwnershipWithContract(contract: ethers.Contract, tokenId: number, walletAddress: string, contractAddress: string): Promise<CertificateData | null> {
+    try {
+      const owner = await contract.ownerOf(tokenId);
+      
+      if (owner.toLowerCase() === walletAddress.toLowerCase()) {
+        let tokenURI = '';
+        let metadata = null;
+        
+        try {
+          tokenURI = await contract.tokenURI(tokenId);
+          
+          // Try to fetch metadata with timeout
+          if (tokenURI) {
+            if (tokenURI.startsWith('http')) {
+              try {
+                const response = await axios.get(tokenURI, {
+                  timeout: 3000,
+                  headers: {
+                    'Accept': 'application/json',
+                    'User-Agent': 'Certimos-Backend/1.0'
+                  }
+                });
+                
+                metadata = response.data;
+              } catch (axiosError) {
+                const errorMessage = axiosError instanceof Error ? axiosError.message : 'Unknown error';
+                console.warn(`Metadata fetch timeout/error for token ${tokenId}:`, errorMessage);
+              }
+            } else if (tokenURI.startsWith('ipfs://')) {
+              // Handle IPFS URLs with multiple gateway fallbacks
+              const ipfsHash = tokenURI.replace('ipfs://', '');
+              const ipfsGateways = [
+                `https://ipfs.io/ipfs/${ipfsHash}`,
+                `https://gateway.pinata.cloud/ipfs/${ipfsHash}`,
+                `https://cloudflare-ipfs.com/ipfs/${ipfsHash}`
+              ];
+              
+              for (const gateway of ipfsGateways) {
+                try {
+                  const response = await axios.get(gateway, {
+                    timeout: 8000,
+                    headers: {
+                      'Accept': 'application/json',
+                      'User-Agent': 'Certimos-Backend/1.0'
+                    }
+                  });
+                  
+                  metadata = response.data;
+                  console.log(`✅ Successfully fetched IPFS metadata for token ${tokenId} from ${gateway}`);
+                  break; // Exit loop on success
+                } catch (axiosError) {
+                  const errorMessage = axiosError instanceof Error ? axiosError.message : 'Unknown error';
+                  console.warn(`IPFS fetch failed from ${gateway} for token ${tokenId}: ${errorMessage}`);
+                  // Continue to next gateway
+                }
+              }
+            } else if (tokenURI.startsWith('data:application/json')) {
+              const base64Data = tokenURI.split(',')[1];
+              const jsonString = Buffer.from(base64Data, 'base64').toString();
+              metadata = JSON.parse(jsonString);
+            }
+          }
+        } catch (uriError) {
+          const errorMessage = uriError instanceof Error ? uriError.message : 'Unknown error';
+          console.warn(`Could not get URI/metadata for token ${tokenId}:`, errorMessage);
+        }
+
+        // Calculate certificate value
+        const valuation = this.calculateCertificateValue(tokenId, metadata, tokenURI);
+
+        return {
+          tokenId: tokenId.toString(),
+          owner,
+          tokenURI,
+          metadata,
+          name: metadata?.name || `Certificate #${tokenId}`,
+          description: metadata?.description || 'Certificate NFT',
+          image: this.fixImageUrl(metadata?.image || null),
+          attributes: metadata?.attributes || [],
+          points: valuation.points,
+          rarity: valuation.rarity,
+          category: valuation.category
+        };
+      }
+      
+      return null;
+    } catch (error) {
+      // Token doesn't exist or other error - this is normal
+      return null;
+    }
+  }
+
+  async checkTokenOwnership(tokenId: number, walletAddress: string): Promise<CertificateData | null> {
   try {
     const owner = await this.contract!.ownerOf(tokenId);
     
@@ -336,28 +432,47 @@ async checkTokenOwnership(tokenId: number, walletAddress: string): Promise<Certi
         // Try to fetch metadata with timeout
         if (tokenURI) {
           if (tokenURI.startsWith('http')) {
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 3000); // Reduce from 5s to 3s
-            
             try {
-              const response = await fetch(tokenURI, { 
-                signal: controller.signal,
+              const response = await axios.get(tokenURI, {
+                timeout: 3000,
                 headers: {
                   'Accept': 'application/json',
                   'User-Agent': 'Certimos-Backend/1.0'
                 }
               });
-              clearTimeout(timeoutId);
               
-              if (response.ok) {
-                metadata = await response.json();
-              } else {
-                console.warn(`Failed to fetch metadata for token ${tokenId}: ${response.status}`);
-              }
-            } catch (fetchError) {
-              clearTimeout(timeoutId);
-              const errorMessage = fetchError instanceof Error ? fetchError.message : 'Unknown error';
+              metadata = response.data;
+            } catch (axiosError) {
+              const errorMessage = axiosError instanceof Error ? axiosError.message : 'Unknown error';
               console.warn(`Metadata fetch timeout/error for token ${tokenId}:`, errorMessage);
+            }
+          } else if (tokenURI.startsWith('ipfs://')) {
+            // Handle IPFS URLs with multiple gateway fallbacks
+            const ipfsHash = tokenURI.replace('ipfs://', '');
+            const ipfsGateways = [
+              `https://ipfs.io/ipfs/${ipfsHash}`,
+              `https://gateway.pinata.cloud/ipfs/${ipfsHash}`,
+              `https://cloudflare-ipfs.com/ipfs/${ipfsHash}`
+            ];
+            
+            for (const gateway of ipfsGateways) {
+              try {
+                const response = await axios.get(gateway, {
+                  timeout: 8000,
+                  headers: {
+                    'Accept': 'application/json',
+                    'User-Agent': 'Certimos-Backend/1.0'
+                  }
+                });
+                
+                metadata = response.data;
+                console.log(`✅ Successfully fetched IPFS metadata for token ${tokenId} from ${gateway}`);
+                break; // Exit loop on success
+              } catch (axiosError) {
+                const errorMessage = axiosError instanceof Error ? axiosError.message : 'Unknown error';
+                console.warn(`IPFS fetch failed from ${gateway} for token ${tokenId}: ${errorMessage}`);
+                // Continue to next gateway
+              }
             }
           } else if (tokenURI.startsWith('data:application/json')) {
             const base64Data = tokenURI.split(',')[1];
@@ -380,7 +495,7 @@ async checkTokenOwnership(tokenId: number, walletAddress: string): Promise<Certi
         metadata,
         name: metadata?.name || `Certificate #${tokenId}`,
         description: metadata?.description || 'Certificate NFT',
-        image: metadata?.image || null,
+        image: this.fixImageUrl(metadata?.image || null),
         attributes: metadata?.attributes || [],
         points: valuation.points,
         rarity: valuation.rarity,
@@ -476,8 +591,9 @@ async checkTokenOwnership(tokenId: number, walletAddress: string): Promise<Certi
       // Handle uploaded image file
       let imageUrl = null;
       if (req.file) {
-        // For now, we'll store the local file path. In production, you'd upload to IPFS or cloud storage
-        imageUrl = `/uploads/${req.file.filename}`;
+        // Use full backend URL since uploads are served by backend
+        const backendUrl = `http://localhost:${process.env.PORT || 5000}`;
+        imageUrl = `${backendUrl}/uploads/${req.file.filename}`;
       }
 
       // Parse custom attributes if provided
@@ -861,6 +977,301 @@ async checkTokenOwnership(tokenId: number, walletAddress: string): Promise<Certi
         success: false,
         error: 'Failed to transfer certificate',
         message: error instanceof Error ? error.message : 'Internal server error'
+      });
+    }
+  }
+
+  // New method: Get certificates from multiple contracts
+  async getUserCertificatesFromMultipleContracts(req: Request, res: Response) {
+    try {
+      const { walletAddress } = req.params;
+      const { contracts } = req.query; // Comma-separated list of contract addresses
+      
+      console.log(`🔍 Fetching certificates from multiple contracts for wallet: ${walletAddress}`);
+      
+      if (!walletAddress.match(/^0x[a-fA-F0-9]{40}$/)) {
+        return res.status(400).json({ 
+          success: false,
+          error: 'Invalid wallet address format' 
+        });
+      }
+
+      // Parse contract addresses from query parameter
+      let contractAddresses: string[] = [];
+      
+      if (contracts && typeof contracts === 'string') {
+        contractAddresses = contracts.split(',').map(addr => addr.trim());
+        console.log(`🎯 Checking specific contracts: ${contractAddresses.join(', ')}`);
+      } else {
+        // If no contracts specified, get all contracts from deployments
+        contractAddresses = await this.getAllDeployedContracts();
+        console.log(`🌐 Checking all deployed contracts: ${contractAddresses.length} contracts found`);
+      }
+
+      // Validate contract addresses
+      const validContracts = contractAddresses.filter(addr => 
+        addr.match(/^0x[a-fA-F0-9]{40}$/)
+      );
+
+      if (validContracts.length === 0) {
+        return res.json({
+          success: true,
+          walletAddress,
+          certificates: [],
+          count: 0,
+          balance: '0',
+          network: 'XDC Apothem',
+          contractAddresses: [],
+          totalPoints: 0,
+          message: 'No valid contracts to check'
+        });
+      }
+
+      console.log(`✅ Checking ${validContracts.length} valid contract addresses`);
+
+      // Fetch certificates from all contracts in parallel
+      const certificatePromises = validContracts.map(contractAddress => 
+        this.getCertificatesFromSingleContract(walletAddress, contractAddress)
+      );
+
+      const results = await Promise.allSettled(certificatePromises);
+      
+      // Combine all certificates
+      const allCertificates: (CertificateData & { contractAddress: string })[] = [];
+      const contractResults: { [address: string]: any } = {};
+
+      results.forEach((result, index) => {
+        const contractAddress = validContracts[index];
+        
+        if (result.status === 'fulfilled' && result.value.success) {
+          const certificates = result.value.certificates.map((cert: CertificateData) => ({
+            ...cert,
+            contractAddress
+          }));
+          allCertificates.push(...certificates);
+          contractResults[contractAddress] = {
+            success: true,
+            count: certificates.length,
+            totalPoints: result.value.totalPoints
+          };
+          console.log(`✅ Contract ${contractAddress}: Found ${certificates.length} certificates`);
+        } else {
+          contractResults[contractAddress] = {
+            success: false,
+            error: result.status === 'rejected' ? result.reason : 'Failed to fetch'
+          };
+          console.log(`❌ Contract ${contractAddress}: Failed to fetch certificates`);
+        }
+      });
+
+      // Calculate aggregated stats
+      const totalPoints = allCertificates.reduce((sum, cert) => sum + (cert.points || 0), 0);
+      const rarityDistribution: Record<string, number> = {};
+      const categoryDistribution: Record<string, number> = {};
+
+      allCertificates.forEach(cert => {
+        if (cert.rarity) {
+          rarityDistribution[cert.rarity] = (rarityDistribution[cert.rarity] || 0) + 1;
+        }
+        if (cert.category) {
+          categoryDistribution[cert.category] = (categoryDistribution[cert.category] || 0) + 1;
+        }
+      });
+
+      console.log(`🎉 Total certificates found: ${allCertificates.length} across ${validContracts.length} contracts`);
+
+      return res.json({
+        success: true,
+        walletAddress,
+        certificates: allCertificates,
+        count: allCertificates.length,
+        network: 'XDC Apothem',
+        contractAddresses: validContracts,
+        contractResults,
+        totalPoints,
+        valueBreakdown: {
+          totalCertificates: allCertificates.length,
+          totalPoints,
+          averagePoints: allCertificates.length > 0 ? Math.round(totalPoints / allCertificates.length) : 0,
+          rarityDistribution,
+          categoryDistribution
+        }
+      });
+
+    } catch (error) {
+      console.error('❌ Error fetching certificates from multiple contracts:', error);
+      res.status(500).json({ 
+        success: false,
+        error: 'Failed to fetch certificates from multiple contracts',
+        details: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  }
+
+  // Helper method: Get certificates from a single contract
+  private async getCertificatesFromSingleContract(walletAddress: string, contractAddress: string): Promise<any> {
+    try {
+      console.log(`🔍 Checking contract ${contractAddress} for wallet ${walletAddress}`);
+      
+      // Create a dedicated contract instance for this check to avoid concurrency issues
+      const contractProvider = new ethers.JsonRpcProvider(process.env.APOTHEM_RPC_URL);
+      const contract = new ethers.Contract(contractAddress, contractABI, contractProvider);
+
+      // Check balance
+      const balance = await contract.balanceOf(walletAddress);
+      const balanceNum = parseInt(balance.toString());
+      
+      if (balanceNum === 0) {
+        return {
+          success: true,
+          certificates: [],
+          totalPoints: 0
+        };
+      }
+
+      const certificates: CertificateData[] = [];
+      const maxTokensToCheck = Math.min(50, balanceNum * 5); // Match original logic
+      const batchSize = 3; // Match original batch size
+      
+      // Process in smaller batches for multiple contracts
+      for (let i = 0; i < maxTokensToCheck; i += batchSize) {
+        const tokenPromises: Promise<CertificateData | null>[] = [];
+        
+        for (let tokenId = i; tokenId < Math.min(i + batchSize, maxTokensToCheck); tokenId++) {
+          tokenPromises.push(this.checkTokenOwnershipWithContract(contract, tokenId, walletAddress, contractAddress));
+        }
+
+        const batchResults = await Promise.allSettled(tokenPromises);
+        const validCertificates = batchResults
+          .filter(result => result.status === 'fulfilled' && result.value !== null)
+          .map(result => (result as PromiseFulfilledResult<CertificateData>).value);
+
+        certificates.push(...validCertificates);
+
+        // Stop if we found all certificates
+        if (certificates.length >= balanceNum) {
+          break;
+        }
+      }
+
+      const totalPoints = certificates.reduce((sum, cert) => sum + (cert.points || 0), 0);
+
+      return {
+        success: true,
+        certificates,
+        totalPoints
+      };
+
+    } catch (error) {
+      console.warn(`⚠️ Error checking contract ${contractAddress}:`, error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      };
+    }
+  }
+
+  // Helper method: Get all deployed contract addresses from deployments.ts
+  private async getAllDeployedContracts(): Promise<string[]> {
+    try {
+      const deploymentsPath = path.join(process.cwd(), 'scripts', 'deployments.ts');
+      
+      if (!fs.existsSync(deploymentsPath)) {
+        console.log('📂 No deployments.ts file found, using default contracts');
+        return [
+          '0x9b40c3c0656434fd89bC50671a29d1814EDA8079', // Default contract
+          '0xEa23289AA36686d3cB805a75cA14142cebd6dF7f'  // Current contract
+        ];
+      }
+
+      const deploymentsContent = fs.readFileSync(deploymentsPath, 'utf8');
+      const match = deploymentsContent.match(/export const deployments: Record<string, DeploymentConfig> = ({[\s\S]*?});/);
+      
+      if (!match) {
+        console.log('📂 No deployments found in deployments.ts');
+        return [];
+      }
+
+      const deployments = JSON.parse(match[1]);
+      const contractAddresses: string[] = [];
+
+      // Recursive function to extract contract addresses from nested structure
+      const extractContracts = (obj: any) => {
+        if (typeof obj === 'object' && obj !== null) {
+          // If this object has contractAddress, add it
+          if (obj.contractAddress && obj.contractAddress.match(/^0x[a-fA-F0-9]{40}$/)) {
+            contractAddresses.push(obj.contractAddress);
+          }
+          
+          // Recursively check nested objects
+          Object.values(obj).forEach(value => {
+            if (typeof value === 'object' && value !== null) {
+              extractContracts(value);
+            }
+          });
+        }
+      };
+
+      extractContracts(deployments);
+
+      // No default contract needed - system is fully dynamic
+
+      // Add fallback legacy contract if not already included
+      const legacyContract = '0x9b40c3c0656434fd89bC50671a29d1814EDA8079';
+      if (!contractAddresses.includes(legacyContract)) {
+        contractAddresses.push(legacyContract);
+        console.log(`📋 Added legacy contract: ${legacyContract}`);
+      }
+
+      console.log(`📋 Found ${contractAddresses.length} deployed contracts (including nested ones)`);
+      console.log(`📋 Contract addresses: ${contractAddresses.join(', ')}`);
+      return [...new Set(contractAddresses)]; // Remove duplicates
+
+    } catch (error) {
+      console.warn('⚠️ Error reading deployments:', error);
+      return [
+        '0x9b40c3c0656434fd89bC50671a29d1814EDA8079', // Default fallback
+        '0xEa23289AA36686d3cB805a75cA14142cebd6dF7f'  // Current contract
+      ];
+    }
+  }
+
+  // Test endpoint for debugging IPFS metadata fetching
+  async testIpfsMetadata(req: Request, res: Response) {
+    try {
+      const testHash = 'QmPhTBYmWcPoAdpSd13h66hK1dcmYq5KBYw4w5szcabZA7';
+      const ipfsGatewayUrl = `https://gateway.pinata.cloud/ipfs/${testHash}`;
+      
+      console.log(`🔍 Testing IPFS fetch from: ${ipfsGatewayUrl}`);
+      
+      try {
+        const response = await axios.get(ipfsGatewayUrl, {
+          timeout: 15000, // Increase timeout to 15 seconds for IPFS
+          headers: {
+            'Accept': 'application/json',
+            'User-Agent': 'Certimos-Backend/1.0'
+          }
+        });
+        
+        console.log(`✅ IPFS fetch successful:`, response.data);
+        res.json({
+          success: true,
+          data: response.data,
+          url: ipfsGatewayUrl
+        });
+      } catch (axiosError) {
+        console.error(`❌ IPFS fetch failed:`, axiosError);
+        res.status(500).json({
+          success: false,
+          error: axiosError instanceof Error ? axiosError.message : 'Unknown error',
+          url: ipfsGatewayUrl
+        });
+      }
+    } catch (error) {
+      console.error('❌ Test endpoint error:', error);
+      res.status(500).json({
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error'
       });
     }
   }

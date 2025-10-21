@@ -38,6 +38,18 @@ router.get('/wallet/:walletAddress', validateWalletAddress, (req, res) => {
   certificateController.getUserCertificates(req, res);
 });
 
+// Test endpoint for debugging IPFS metadata fetching
+router.get('/test-ipfs', (req, res) => {
+  const certificateController = new CertificateController();
+  certificateController.testIpfsMetadata(req, res);
+});
+
+// Get certificates from multiple contracts for a wallet
+router.get('/wallet/:walletAddress/multi-contract', validateWalletAddress, (req, res) => {
+  const certificateController = new CertificateController();
+  certificateController.getUserCertificatesFromMultipleContracts(req, res);
+});
+
 // Get total supply of certificates for a user
 router.get('/total-supply/:walletAddress', validateWalletAddress, (req, res) => {
   const certificateController = new CertificateController();

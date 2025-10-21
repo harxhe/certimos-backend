@@ -1,14 +1,9 @@
-import { network } from "hardhat";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
-import dotenv from "dotenv";
-dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-
-const { ethers } = await network.connect();
 
 // Define the structure for deployment information
 interface DeploymentInfo {
@@ -21,8 +16,7 @@ interface DeploymentInfo {
   owner: string;
 }
 
-// NOTE: A full implementation for saving to deployments.ts would go here.
-// For now, this is a placeholder to show where it would be called.
+// Utility function to save deployment information (without deployment logic)
 export async function saveDeploymentInfo(deploymentInfo: DeploymentInfo) {
   console.log("📝 Saving deployment information...");
   
@@ -95,74 +89,3 @@ export const deployments: Record<string, DeploymentConfig> = ${JSON.stringify(cu
     throw error;
   }
 }
-
-async function main() {
-  // 1. Read configuration from environment variables
-  const ownerAddress = process.env.WALLET_ADDRESS;
-  const contractName = process.env.CONTRACT_NAME;
-
-  // 2. Validate the inputs
-  if (!ownerAddress) {
-    throw new Error("Missing required environment variable: WALLET_ADDRESS. Please set it in your .env file.");
-  }
-  if (!contractName) {
-    throw new Error("Missing required environment variable: CONTRACT_NAME. This should be passed from the API router.");
-  }
-
-  console.log(`Deploying contract "${contractName}"...`);
-  console.log(`Owner will be set to (from .env): ${ownerAddress}`);
-
-  const [deployer] = await ethers.getSigners();
-  console.log("Deploying contract with account:", deployer.address);
-
-  console.log("\nGetting contract factory for 'Certificate'...");
-  const Certificate = await ethers.getContractFactory("Certificate");
-
-  console.log(`Sending deployment transaction with owner ${ownerAddress}... (This may take a moment)`);
-  const certificate = await Certificate.deploy(ownerAddress);
-
-  console.log("Waiting for deployment transaction to be mined...");
-  await certificate.waitForDeployment();
-  console.log("✅ Deployment transaction mined!");
-
-
-  const address = await certificate.getAddress();
-  const deployTx = certificate.deploymentTransaction();
-
-  console.log(`\n"${contractName}" deployed to address:`, address);
-  console.log("Verified contract owner:", await certificate.getFunction("owner")());
-  
-  const networkName = 'apothem';
-  
-  const deploymentInfo: DeploymentInfo = {
-      contractAddress: address,
-      network: networkName,
-      transactionHash: deployTx?.hash || '',
-      deployedAt: new Date().toISOString(),
-      deployer: ownerAddress, // Use the wallet address passed from frontend, not the signer
-      contractName: contractName,
-      owner: ownerAddress
-  };
-
- await saveDeploymentInfo(deploymentInfo);
-  console.log("\nDeployment successful!");
-
-  // 3. Output the final result as a JSON string for the API to parse
-  const result = {
-    success: true,
-    deploymentInfo
-  };
-  
-  console.log("DEPLOYMENT_RESULT:", JSON.stringify(result));
-}
-
-main()
-  .then(() => process.exit(0))
-  .catch((error) => {
-    console.error("Error deploying contract:", error);
-    const result = { success: false, error: error.message };
-    // Also output a JSON result on failure
-    console.log("DEPLOYMENT_RESULT:", JSON.stringify(result));
-    process.exit(1);
-  });
-

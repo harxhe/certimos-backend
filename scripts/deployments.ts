@@ -70,12 +70,26 @@ export const deployments: Record<string, DeploymentConfig> = {
       "deployer": "0xaacae99d6e2bf87813233e3d46eb48c9f796016c",
       "contractName": "HACKAAA",
       "owner": "0xaacae99d6e2bf87813233e3d46eb48c9f796016c"
+    },
+    "VIT HACK": {
+      "contractAddress": "0xEa23289AA36686d3cB805a75cA14142cebd6dF7f",
+      "network": "apothem",
+      "blockNumber": 0,
+      "transactionHash": "0x53d7bc6fd4d8d2193fa4f1cb3d449d3f93140468a82e29b2d8fc56831b17871c",
+      "deployedAt": "2025-10-20T18:12:35.810Z",
+      "deployer": "0xb0feb403dcfbefb1c560bea60ba4a5727a367013",
+      "contractName": "VIT HACK",
+      "owner": "0xb0feb403dcfbefb1c560bea60ba4a5727a367013"
+    },
+    "DIWALI": {
+      "contractAddress": "0x5dD318a484b39A0622f3dd2bede5df815144eD89",
+      "network": "apothem",
+      "blockNumber": 0,
+      "transactionHash": "0xa793148dae1339f1d4af1e30807bd87ce8f90f9d2c60fe0eb331c921991efea8",
+      "deployedAt": "2025-10-21T09:37:26.469Z",
+      "deployer": "0xaacae99d6e2bf87813233e3d46eb48c9f796016c",
+      "contractName": "DIWALI",
+      "owner": "0xaacae99d6e2bf87813233e3d46eb48c9f796016c"
     }
   }
 };
-
-// Function to fetch contract address by name
-export function fetchcontract(contractName: string): string | null {
-  const deployment = deployments[contractName];
-  return deployment ? deployment.contractAddress : null;
-}

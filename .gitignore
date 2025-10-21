@@ -19,4 +19,10 @@
 # Hardhat coverage reports
 /coverage
 
+# Temporary files and uploads
+/temp
+/uploads
+/metadata
+
+# Environment variables
 .env

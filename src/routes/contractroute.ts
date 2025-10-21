@@ -11,7 +11,7 @@ import {
   parseRecipientsCSV
 } from '../controllers/generateContractController.js';
 
-import { fetchcontract } from '../../scripts/deployments.js';
+// import { fetchcontract } from '../../scripts/deployments.js';
 import { eventNames } from 'process';
 
 const execAsync = util.promisify(exec);
@@ -47,17 +47,68 @@ const upload = multer({
   }
 });
 
+// Separate multer configuration for image uploads (for single certificate minting)
+const imageFileFilter = (req: any, file: any, cb: any) => {
+  if (file.mimetype.startsWith('image/') || 
+      file.originalname.toLowerCase().match(/\.(jpg|jpeg|png|gif|webp|svg)$/)) {
+    cb(null, true);
+  } else {
+    cb(new Error('Only image files are allowed!'), false);
+  }
+};
+
+const imageUpload = multer({ 
+  storage: storage,
+  fileFilter: imageFileFilter,
+  limits: {
+    fileSize: 5 * 1024 * 1024 // 5MB limit
+  }
+});
+
+// Optional upload middleware - allows requests with or without files
+const optionalImageUpload = multer({ 
+  storage: storage,
+  fileFilter: (req: any, file: any, cb: any) => {
+    // Allow images or accept any file type (we'll handle it)
+    if (file.mimetype.startsWith('image/') || 
+        file.originalname.toLowerCase().match(/\.(jpg|jpeg|png|gif|webp|svg)$/)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only image files are allowed!'), false);
+    }
+  },
+  limits: {
+    fileSize: 5 * 1024 * 1024 // 5MB limit
+  }
+});
+
 const router = Router();
 
 // Function to run the deploy.ts script
 // (Multer configuration and other routes remain unchanged...)
 
-// Single certificate minting route
-router.post('/mint-single-certificate', upload.single('certificateImage'), async (req: any, res: Response) => {
+
+// NEW: Prepare single certificate for frontend minting (with optional image upload)
+router.post('/prepare-single-certificate', optionalImageUpload.single('certificateImage'), async (req: any, res: Response) => {
   try {
     console.log('🚀 Starting single certificate minting...');
+    console.log('Request headers:', req.headers);
+    console.log('Content-Type:', req.get('content-type'));
     console.log('Request body:', req.body);
     console.log('Uploaded file:', req.file);
+    console.log('Request body type:', typeof req.body);
+    console.log('Request body keys:', req.body ? Object.keys(req.body) : 'No body');
+    console.log('Raw body available:', !!req.rawBody);
+    console.log('Multer processing complete');
+
+    // Check if req.body exists
+    if (!req.body || Object.keys(req.body).length === 0) {
+      return res.status(400).json({
+        error: 'Request body is missing. Please send form data or JSON data.',
+        received_content_type: req.headers['content-type'],
+        help: 'Use multipart/form-data for file uploads or application/json for JSON data'
+      });
+    }
 
     const {
       contractAddress,
@@ -73,53 +124,192 @@ router.post('/mint-single-certificate', upload.single('certificateImage'), async
       customAttributes
     } = req.body;
 
+    console.log('Extracted fields:', {
+      contractAddress,
+      eventName,
+      certificateName,
+      recipientName,
+      recipientWallet
+    });
+
     // Validate required fields
     if (!contractAddress || !eventName || !certificateName || !recipientName || !recipientWallet) {
       return res.status(400).json({
         error: 'Missing required fields',
-        required: ['contractAddress', 'eventName', 'certificateName', 'recipientName', 'recipientWallet']
+        required: ['contractAddress', 'eventName', 'certificateName', 'recipientName', 'recipientWallet'],
+        received: {
+          contractAddress: !!contractAddress,
+          eventName: !!eventName,
+          certificateName: !!certificateName,
+          recipientName: !!recipientName,
+          recipientWallet: !!recipientWallet
+        }
       });
     }
 
-    // Create temporary CSV for single recipient
-    const tempDir = path.join(process.cwd(), 'temp');
-    if (!fs.existsSync(tempDir)) {
-      fs.mkdirSync(tempDir, { recursive: true });
-    }
+    // Handle certificate image (uploaded file or direct URL)
+    let imageUrl = '';
+    const directImageUrl = req.body.imageUrl;
     
-    const csvContent = `participant_name,wallet_address\n${recipientName},${recipientWallet}`;
-    const csvFile = path.join(tempDir, `single-recipient-${Date.now()}.csv`);
-    fs.writeFileSync(csvFile, csvContent);
-
-    // Call the auto-minting function with the temporary CSV
-    const result = await autoMintCertificatesFromCSV(
-      csvFile, 
-      contractAddress, 
-      eventName, 
-      certificateName
-    );
-
-    // Clean up temporary CSV
-    if (fs.existsSync(csvFile)) {
-      fs.unlinkSync(csvFile);
+    if (req.file) {
+      console.log('Certificate image uploaded:', req.file.filename);
+      // Use backend URL since uploads are served by backend
+      const backendUrl = `http://localhost:${process.env.PORT || 5000}`;
+      imageUrl = `${backendUrl}/uploads/${req.file.filename}`;
+    } else if (directImageUrl && directImageUrl.trim()) {
+      console.log('Direct image URL provided:', directImageUrl);
+      imageUrl = directImageUrl.trim();
     }
 
-    if (result.success) {
-      res.status(200).json({
-        message: `Certificate minted successfully for ${recipientName}!`,
-        result: result.results && result.results.length > 0 ? result.results[0] : null
+    // Create initial metadata for calculation
+    const initialMetadata = {
+      name: certificateName,
+      description: description || `Certificate of achievement for ${recipientName}`,
+      image: imageUrl || undefined,
+      attributes: [
+        { trait_type: "Event", value: eventName },
+        { trait_type: "Recipient", value: recipientName },
+        { trait_type: "Skills", value: skills || "" },
+        { trait_type: "Issue Date", value: new Date().toISOString() }
+      ]
+    };
+
+    // Simple points based on user-selected rarity
+    let calculatedPoints = 0;
+    let selectedRarity = rarity || 'Common'; // Use user-selected rarity
+    let calculatedCategory = category || 'General';
+
+    // Points based purely on rarity selection
+    switch (selectedRarity.toLowerCase()) {
+      case 'legendary':
+        calculatedPoints = 500;
+        break;
+      case 'epic':
+        calculatedPoints = 400;
+        break;
+      case 'rare':
+        calculatedPoints = 300;
+        break;
+      case 'uncommon':
+        calculatedPoints = 200;
+        break;
+      case 'common':
+      default:
+        calculatedPoints = 100;
+        break;
+    }
+
+    // Prepare final certificate metadata with calculated values
+    const certificateMetadata = {
+      name: certificateName,
+      description: description || `Certificate of achievement for ${recipientName}`,
+      image: imageUrl || undefined,
+      attributes: [
+        { trait_type: "Event", value: eventName },
+        { trait_type: "Recipient", value: recipientName },
+        { trait_type: "Category", value: calculatedCategory },
+        { trait_type: "Rarity", value: selectedRarity },
+        { trait_type: "Points", value: calculatedPoints },
+        { trait_type: "Skills", value: skills || "" },
+        { trait_type: "Issue Date", value: new Date().toISOString() }
+      ]
+    };
+
+    // Add custom attributes if provided
+    if (customAttributes && customAttributes.trim()) {
+      try {
+        const customAttrs = JSON.parse(customAttributes);
+        if (Array.isArray(customAttrs)) {
+          certificateMetadata.attributes.push(...customAttrs);
+        }
+      } catch (e) {
+        console.warn('Failed to parse custom attributes:', e);
+      }
+    }
+
+    console.log('📤 Uploading metadata to Pinata for frontend minting...');
+    
+    // Upload metadata to Pinata using inline function
+    try {
+      const pinataApiKey = process.env.API_Key;
+      const pinataJWT = process.env.JWT;
+      
+      if (!pinataJWT) {
+        throw new Error('Pinata JWT not configured');
+      }
+
+      // Upload JSON metadata to Pinata
+      const formData = new FormData();
+      const metadataBlob = new Blob([JSON.stringify(certificateMetadata, null, 2)], {
+        type: 'application/json'
       });
-    } else {
+      
+      formData.append('file', metadataBlob, `${recipientName}-certificate.json`);
+      formData.append('pinataMetadata', JSON.stringify({
+        name: `${recipientName}-certificate.json`,
+        keyvalues: {
+          event: eventName,
+          recipient: recipientName,
+          type: 'certificate-metadata'
+        }
+      }));
+
+      const pinataResponse = await fetch('https://api.pinata.cloud/pinning/pinFileToIPFS', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${pinataJWT}`
+        },
+        body: formData
+      });
+
+      if (!pinataResponse.ok) {
+        throw new Error(`Pinata upload failed: ${pinataResponse.statusText}`);
+      }
+
+      const pinataResult = await pinataResponse.json() as { IpfsHash: string };
+      const pinataUri = `ipfs://${pinataResult.IpfsHash}`;
+      
+      console.log('✅ Pinata Upload successful:', pinataUri);
+      
+      // Return data needed for frontend minting
+      res.status(200).json({
+        success: true,
+        message: `Certificate metadata prepared successfully for ${recipientName}!`,
+        certificateData: {
+          recipientAddress: recipientWallet,
+          tokenURI: pinataUri,
+          metadata: certificateMetadata,
+          contractAddress: contractAddress
+        },
+        uploadedImage: req.file ? {
+          filename: req.file.filename,
+          url: imageUrl,
+          size: req.file.size
+        } : null,
+        pinataUri: pinataUri
+      });
+      
+    } catch (pinataError) {
+      console.error('❌ Pinata upload failed:', pinataError);
       res.status(500).json({
-        error: result.error || 'Failed to mint certificate'
+        error: 'Failed to upload certificate metadata',
+        details: pinataError instanceof Error ? pinataError.message : 'Unknown error'
       });
     }
 
   } catch (error) {
     console.error('❌ Error in single certificate minting:', error);
+    
+    // Clean up uploaded file on error
+    if (req.file && fs.existsSync(req.file.path)) {
+      fs.unlinkSync(req.file.path);
+    }
+    
     res.status(500).json({
       error: 'Internal server error during certificate minting',
-      details: error instanceof Error ? error.message : 'Unknown error'
+      details: error instanceof Error ? error.message : 'Unknown error',
+      body_debug: req.body ? 'Body exists' : 'Body is undefined',
+      headers_debug: req.headers['content-type']
     });
   }
 });
@@ -159,11 +349,11 @@ router.post('/auto-mint-with-ipfs', upload.single('csvFile'), async (req: any, r
     const contactName = req.body.contractName;
     const eventName = req.body.eventName;
     const certificateName = req.body.certificateName;
-    const contractAddress = req.body.contractAddress || await fetchcontract(contactName);
+    const contractAddress = req.body.contractAddress;
 
     if (!contractAddress) {
       return res.status(400).json({
-        error: 'Contract address not found. Please provide contractAddress or valid contractName.'
+        error: 'Contract address is required. Please provide contractAddress.'
       });
     }
 
@@ -368,12 +558,10 @@ router.post('/validate-csv', upload.single('csvFile'), async (req: any, res: Res
 // Route to deploy a new contract using deploy.ts script
 
 router.post('/deploy', async (req: Request, res: Response) => {
-  console.log("\n[DEBUG] /deploy route hit at:", new Date().toISOString());
-
   const { networkName, contractName, walletAddress } = req.body;
-  console.log(`[DEBUG] Request Body:`, { networkName, contractName, walletAddress });
+  console.log(`🚀 Deploying contract: ${contractName} on ${networkName}`);
   if (!networkName || !contractName || !walletAddress) {
-    console.error("[DEBUG] Validation failed: Missing networkName, contractName, or walletAddress.");
+    console.error("❌ Validation failed: Missing required fields");
     return res.status(400).json({
       error: 'Missing required fields',
       required: ['networkName', 'contractName', 'walletAddress'],
@@ -382,15 +570,14 @@ router.post('/deploy', async (req: Request, res: Response) => {
 
   process.env.WALLET_ADDRESS = walletAddress;
 
-  console.log(`[DEBUG] 🚀 Spawning deployment process...`);
+
 
   const runDeployment = () => new Promise<string>((resolve, reject) => {
     const scriptPath = path.join(process.cwd(), 'scripts', 'deploy.ts');
     const command = 'yarn';
     const args = ['hardhat', 'run', scriptPath, '--network', networkName];
     
-    console.log(`[DEBUG] Executing command: ${command} ${args.join(' ')}`);
-    console.log(`[DEBUG] With ENV: CONTRACT_NAME=${contractName}`);
+
 
     const child = spawn(command, args, {
       cwd: process.cwd(),
@@ -415,7 +602,7 @@ router.post('/deploy', async (req: Request, res: Response) => {
     });
     
     child.on('close', (code) => {
-      console.log(`[DEBUG] Child process exited with code ${code}`);
+      console.log(`✅ Deployment process completed with code ${code}`);
       if (code !== 0) {
         const error = new Error(`Script exited with error code ${code}`);
         (error as any).stdout = stdoutData;
@@ -433,16 +620,16 @@ router.post('/deploy', async (req: Request, res: Response) => {
 
   try {
     const fullOutput = await runDeployment();
-    console.log("[DEBUG] Searching for DEPLOYMENT_RESULT in script output...");
+
     
     const resultLine = fullOutput.split('\n').find(line => line.includes('DEPLOYMENT_RESULT:'));
 
     if (resultLine) {
-      console.log("[DEBUG] Found DEPLOYMENT_RESULT. Parsing JSON...");
+
       const result = JSON.parse(resultLine.replace('DEPLOYMENT_RESULT:', '').trim());
       
       if (result.success) {
-        console.log("[DEBUG] Deployment success. Sending 200 OK response.");
+        console.log("✅ Contract deployed successfully");
         res.json({
           success: true,
           message: 'Contract deployed successfully!',
@@ -544,10 +731,14 @@ router.get('/networks', (req: Request, res: Response) => {
 // Route to get deployment history
 router.get('/deployments', (req: Request, res: Response) => {
   try {
+    const { walletAddress } = req.query;
+
+    
     const deploymentsPath = path.join(process.cwd(), 'scripts', 'deployments.ts');
     
     if (!fs.existsSync(deploymentsPath)) {
       return res.json({
+        success: true,
         deployments: {},
         contracts: [],
         total_deployments: 0,
@@ -586,8 +777,12 @@ router.get('/deployments', (req: Request, res: Response) => {
               owner: networkData.owner || networkData.deployer || '',
               deploymentId: `${network}-main`
             };
-            contracts.push(cleanContract);
-            totalDeployments++;
+            
+            // Filter by wallet address if provided
+            if (!walletAddress || (cleanContract.deployer && cleanContract.deployer.toLowerCase() === walletAddress.toString().toLowerCase())) {
+              contracts.push(cleanContract);
+              totalDeployments++;
+            }
           }
           
           // Check for nested contract deployments
@@ -595,7 +790,7 @@ router.get('/deployments', (req: Request, res: Response) => {
             const item = networkData[key];
             // If the item is an object with contractAddress, it's a nested deployment
             if (typeof item === 'object' && item && item.contractAddress && key !== 'contractAddress') {
-              contracts.push({
+              const contract = {
                 contractAddress: item.contractAddress,
                 network: item.network || network,
                 blockNumber: item.blockNumber || 0,
@@ -605,8 +800,13 @@ router.get('/deployments', (req: Request, res: Response) => {
                 contractName: item.contractName || key,
                 owner: item.owner || item.deployer || '',
                 deploymentId: `${network}-${key}`
-              });
-              totalDeployments++;
+              };
+              
+              // Filter by wallet address if provided
+              if (!walletAddress || (contract.deployer && contract.deployer.toLowerCase() === walletAddress.toString().toLowerCase())) {
+                contracts.push(contract);
+                totalDeployments++;
+              }
             }
           });
         });
@@ -687,6 +887,233 @@ router.get('/deployment-info', (req: Request, res: Response) => {
   };
   
   res.json(deploymentInfo);
+});
+
+// Route to save deployment information from frontend
+router.post('/save-deployment', async (req: Request, res: Response) => {
+  const { contractAddress, network, transactionHash, deployedAt, deployer, contractName, owner } = req.body;
+  console.log(`💾 Saving deployment: ${contractName} at ${contractAddress}`);  if (!contractAddress || !network || !deployer || !contractName) {
+    console.error("[DEBUG] Validation failed: Missing required fields.");
+    return res.status(400).json({
+      error: 'Missing required fields',
+      required: ['contractAddress', 'network', 'deployer', 'contractName'],
+    });
+  }
+
+  try {
+    // Save deployment info using the utility function
+    const { saveDeploymentInfo } = await import('../../scripts/deployment-utils.js');
+    
+    const deploymentInfo = {
+      contractAddress,
+      network,
+      transactionHash: transactionHash || '',
+      deployedAt: deployedAt || new Date().toISOString(),
+      deployer,
+      contractName,
+      owner: owner || deployer
+    };
+
+    await saveDeploymentInfo(deploymentInfo);
+    
+    console.log("✅ Deployment info saved successfully");
+    res.json({
+      success: true,
+      message: 'Deployment information saved successfully!',
+      deployment: deploymentInfo,
+    });
+
+  } catch (error: any) {
+    console.error('[DEBUG] Error saving deployment info:', error.message);
+    res.status(500).json({
+      error: 'Failed to save deployment information',
+      message: error.message,
+    });
+  }
+});
+
+// OLD: Backend minting route (kept for backward compatibility)
+router.post('/mint-single-certificate', optionalImageUpload.single('certificateImage'), async (req: any, res: Response) => {
+  try {
+    console.log('⚠️  Using deprecated backend minting. Consider using /prepare-single-certificate instead.');
+    console.log('🚀 Starting single certificate minting...');
+    console.log('Request headers:', req.headers);
+    console.log('Content-Type:', req.get('content-type'));
+    console.log('Request body:', req.body);
+    console.log('Uploaded file:', req.file);
+    console.log('Request body type:', typeof req.body);
+    console.log('Request body keys:', req.body ? Object.keys(req.body) : 'No body');
+    console.log('Raw body available:', !!req.rawBody);
+    console.log('Multer processing complete');
+
+    // Check if req.body exists
+    if (!req.body || Object.keys(req.body).length === 0) {
+      return res.status(400).json({
+        error: 'Request body is missing. Please send form data or JSON data.',
+        received_content_type: req.headers['content-type'],
+        help: 'Use multipart/form-data for file uploads or application/json for JSON data'
+      });
+    }
+
+    const {
+      contractAddress,
+      eventName,
+      certificateName,
+      recipientName,
+      recipientWallet,
+      description,
+      category,
+      rarity,
+      points,
+      skills,
+      customAttributes
+    } = req.body;
+
+    console.log('Extracted fields:', {
+      contractAddress,
+      eventName,
+      certificateName,
+      recipientName,
+      recipientWallet
+    });
+
+    // Validate required fields
+    if (!contractAddress || !eventName || !certificateName || !recipientName || !recipientWallet) {
+      return res.status(400).json({
+        error: 'Missing required fields',
+        required: ['contractAddress', 'eventName', 'certificateName', 'recipientName', 'recipientWallet'],
+        received: {
+          contractAddress: !!contractAddress,
+          eventName: !!eventName,
+          certificateName: !!certificateName,
+          recipientName: !!recipientName,
+          recipientWallet: !!recipientWallet
+        }
+      });
+    }
+
+    // Handle certificate image (uploaded file or direct URL)
+    let imageUrl = '';
+    const directImageUrl = req.body.imageUrl;
+    
+    if (req.file) {
+      // Image was uploaded - you can process it here
+      console.log('Certificate image uploaded:', req.file.filename);
+      // Use full backend URL since uploads are served by backend
+      const backendUrl = `http://localhost:${process.env.PORT || 5000}`;
+      imageUrl = `${backendUrl}/uploads/${req.file.filename}`;
+    } else if (directImageUrl && directImageUrl.trim()) {
+      console.log('Direct image URL provided:', directImageUrl);
+      imageUrl = directImageUrl.trim();
+    }
+
+    // Create temporary CSV for single recipient
+    const tempDir = path.join(process.cwd(), 'temp');
+    if (!fs.existsSync(tempDir)) {
+      fs.mkdirSync(tempDir, { recursive: true });
+    }
+    
+    const csvContent = `participant_name,wallet_address\n${recipientName},${recipientWallet}`;
+    const csvFile = path.join(tempDir, `single-recipient-${Date.now()}.csv`);
+    fs.writeFileSync(csvFile, csvContent);
+
+    // Call the auto-minting function with the temporary CSV
+    const result = await autoMintCertificatesFromCSV(
+      csvFile, 
+      contractAddress, 
+      eventName, 
+      certificateName
+    );
+
+    // Clean up temporary CSV
+    if (fs.existsSync(csvFile)) {
+      fs.unlinkSync(csvFile);
+    }
+
+    if (result.success) {
+      res.status(200).json({
+        message: `Certificate minted successfully for ${recipientName}!`,
+        result: result.results && result.results.length > 0 ? result.results[0] : null,
+        uploadedImage: req.file ? {
+          filename: req.file.filename,
+          url: imageUrl,
+          size: req.file.size
+        } : null
+      });
+    } else {
+      res.status(500).json({
+        error: result.error || 'Failed to mint certificate'
+      });
+    }
+
+  } catch (error) {
+    console.error('❌ Single certificate minting error:', error);
+    
+    // Clean up uploaded file if there was an error
+    if (req.file && fs.existsSync(req.file.path)) {
+      fs.unlinkSync(req.file.path);
+    }
+    
+    res.status(500).json({
+      error: 'Something went wrong!',
+      message: error instanceof Error ? error.message : 'Unknown error occurred'
+    });
+  }
+});
+
+// Get contract ABI for frontend minting
+router.get('/contract-abi', (req: Request, res: Response) => {
+  // Certificate contract ABI for frontend minting
+  const contractABI = [
+    {
+      "inputs": [
+        { "internalType": "address", "name": "initialOwner", "type": "address" }
+      ],
+      "stateMutability": "nonpayable",
+      "type": "constructor"
+    },
+    {
+      "inputs": [
+        { "internalType": "address", "name": "recipient", "type": "address" },
+        { "internalType": "string", "name": "tokenURI_", "type": "string" }
+      ],
+      "name": "mintCertificate",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        { "internalType": "uint256", "name": "tokenId", "type": "uint256" }
+      ],
+      "name": "tokenURI",
+      "outputs": [
+        { "internalType": "string", "name": "", "type": "string" }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "owner",
+      "outputs": [
+        { "internalType": "address", "name": "", "type": "address" }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    }
+  ];
+
+  res.json({
+    success: true,
+    contractABI: contractABI,
+    functions: {
+      mint: "mintCertificate(address recipient, string tokenURI_)",
+      owner: "owner()",
+      tokenURI: "tokenURI(uint256 tokenId)"
+    },
+    usage: "Use this ABI with ethers.js to interact with certificate contracts from the frontend"
+  });
 });
 
 export default router;

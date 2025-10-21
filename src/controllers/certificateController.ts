@@ -44,16 +44,15 @@ dotenv.config();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Detect if we're running from source (dev) or compiled (production)
-const isRunningFromDist = __dirname.includes('dist');
-let projectRoot: string;
-
-if (isRunningFromDist) {
-  // Production: dist/src/controllers/ -> go up 3 levels to project root
-  projectRoot = path.resolve(__dirname, '../../..');
-} else {
-  // Development: src/controllers/ -> go up 2 levels to project root
-  projectRoot = path.resolve(__dirname, '../..');
+// Find project root by looking for package.json
+let projectRoot = __dirname;
+while (!fs.existsSync(path.join(projectRoot, 'package.json'))) {
+  const parentDir = path.resolve(projectRoot, '..');
+  if (parentDir === projectRoot) {
+    // Reached the root directory without finding package.json
+    throw new Error('Could not find project root (package.json not found)');
+  }
+  projectRoot = parentDir;
 }
 
 const contractArtifactPath = path.join(projectRoot, 'artifacts', 'contracts', 'Certificate.sol', 'Certificate.json');

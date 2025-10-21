@@ -384,10 +384,10 @@ export async function autoMintCertificatesFromCSV(csvFile: string, contractAddre
 
     console.log(`🔗 Contract Address: ${contractAddress}`);
 
-    // 3. Connect to blockchain network
-    const { ethers: ethersHardhat } = await network.connect();
-    const [signer] = await ethersHardhat.getSigners();
-    console.log(`💳 Minting with account: ${signer.address}`);
+    // 3. Connect to blockchain network using regular ethers
+    const provider = new ethers.JsonRpcProvider(process.env.APOTHEM_RPC_URL);
+    // Note: In production, this would use the user's wallet, not a hardcoded private key
+    console.log(`💳 Using provider for contract interaction`);
 
     // 4. Load available certificate templates for matching
     let availableCertificates: any[] = [];
@@ -409,7 +409,7 @@ export async function autoMintCertificatesFromCSV(csvFile: string, contractAddre
       "function getAddress() public view returns (address)"
     ];
     
-    const certificate = new ethersHardhat.Contract(contractAddress, certificateABI, signer);
+    const certificate = new ethers.Contract(contractAddress, certificateABI, provider);
     
     // 6. Verify contract connection
     try {

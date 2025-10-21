@@ -3,6 +3,7 @@ import { ethers } from 'ethers';
 import axios from 'axios';
 import fs from 'fs';
 import path from 'path';
+import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
 
 interface CertificateData {
@@ -40,7 +41,22 @@ interface CertificateResponse {
 dotenv.config();
 
 // Load the contract ABI
-const contractArtifactPath = path.join(process.cwd(), 'artifacts', 'contracts', 'Certificate.sol', 'Certificate.json');
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Detect if we're running from source (dev) or compiled (production)
+const isRunningFromDist = __dirname.includes('dist');
+let projectRoot: string;
+
+if (isRunningFromDist) {
+  // Production: dist/src/controllers/ -> go up 3 levels to project root
+  projectRoot = path.resolve(__dirname, '../../..');
+} else {
+  // Development: src/controllers/ -> go up 2 levels to project root
+  projectRoot = path.resolve(__dirname, '../..');
+}
+
+const contractArtifactPath = path.join(projectRoot, 'artifacts', 'contracts', 'Certificate.sol', 'Certificate.json');
 let contractABI: any;
 
 try {
@@ -48,6 +64,7 @@ try {
   contractABI = contractArtifact.abi;
 } catch (error) {
   console.error('Error loading contract ABI:', error);
+  console.error('Tried path:', contractArtifactPath);
   throw new Error('Contract ABI not found');
 }
 

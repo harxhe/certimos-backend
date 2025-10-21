@@ -8,8 +8,6 @@ dotenv.config();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const { ethers } = await network.connect();
-
 // Define the structure for deployment information
 interface DeploymentInfo {
   contractAddress: string;
@@ -97,11 +95,15 @@ export const deployments: Record<string, DeploymentConfig> = ${JSON.stringify(cu
 }
 
 async function main() {
-  // 1. Read configuration from environment variables
+  // 1. Import ethers from Hardhat runtime
+  const hre = await import("hardhat");
+  const ethers = (hre as any).ethers;
+  
+  // 2. Read configuration from environment variables
   const ownerAddress = process.env.WALLET_ADDRESS;
   const contractName = process.env.CONTRACT_NAME;
 
-  // 2. Validate the inputs
+  // 3. Validate the inputs
   if (!ownerAddress) {
     throw new Error("Missing required environment variable: WALLET_ADDRESS. Please set it in your .env file.");
   }

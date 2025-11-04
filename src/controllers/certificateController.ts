@@ -46,32 +46,26 @@ const __dirname = path.dirname(__filename);
 
 // Find project root by looking for artifacts directory
 let projectRoot = __dirname;
-console.log('Starting search from __dirname:', __dirname);
 
 while (true) {
   const artifactsPath = path.join(projectRoot, 'artifacts');
   const packageJsonPath = path.join(projectRoot, 'package.json');
   
-  console.log('Checking for artifacts directory in:', projectRoot);
-  
   // Check if both artifacts directory and package.json exist
   if (fs.existsSync(artifactsPath) && fs.existsSync(packageJsonPath)) {
     try {
       const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
-      console.log('Found artifacts directory and package.json with name:', packageJson.name);
       
       // Verify this is our backend package.json with artifacts
       if (packageJson.name === 'certimos-backend') {
-        console.log('Found project root with artifacts at:', projectRoot);
         break;
       }
     } catch (error) {
-      console.log('Error reading package.json:', error instanceof Error ? error.message : String(error));
+      // Continue searching if package.json is invalid
     }
   }
   
   const parentDir = path.resolve(projectRoot, '..');
-  console.log('Moving to parent directory:', parentDir);
   
   if (parentDir === projectRoot) {
     // Reached the root directory without finding artifacts
@@ -80,9 +74,7 @@ while (true) {
   projectRoot = parentDir;
 }
 
-console.log('Found project root:', projectRoot);
 const contractArtifactPath = path.join(projectRoot, 'artifacts', 'contracts', 'Certificate.sol', 'Certificate.json');
-console.log('Contract artifact path:', contractArtifactPath);
 let contractABI: any;
 
 try {
@@ -109,8 +101,8 @@ export class CertificateController {
     const targetContractAddress = contractAddress;
     
     if (!this.provider || !this.contract || this.currentContractAddress !== targetContractAddress) {
-      console.log('🔧 Initializing blockchain connection...');
-      console.log('📍 Target Contract Address:', targetContractAddress);
+      console.log('Initializing blockchain connection...');
+      console.log('Target Contract Address:', targetContractAddress);
       console.log('🌐 APOTHEM_RPC_URL:', process.env.APOTHEM_RPC_URL);
       
       if (!process.env.APOTHEM_RPC_URL) {
@@ -125,7 +117,7 @@ export class CertificateController {
       );
       
       this.currentContractAddress = targetContractAddress;
-      console.log('✅ Blockchain connection initialized successfully');
+      console.log('Blockchain connection initialized successfully');
     }
   }
 
@@ -136,7 +128,7 @@ export class CertificateController {
     }
     
     if (!this.contractWithSigner || !this.wallet || this.currentContractAddress !== targetContractAddress) {
-      console.log('🔧 Initializing contract with signer for transactions...');
+      console.log('Initializing contract with signer for transactions...');
       
       if (!process.env.PRIVATE_KEY) {
         throw new Error('PRIVATE_KEY environment variable is not set');
@@ -151,7 +143,7 @@ export class CertificateController {
         this.wallet
       );
       
-      console.log('✅ Contract with signer initialized successfully');
+      console.log('Contract with signer initialized successfully');
       console.log('🔑 Signer address:', this.wallet.address);
     }
   }
@@ -232,7 +224,7 @@ export class CertificateController {
   try {
     const { walletAddress } = req.params;
     
-    console.log(`🔍 Fetching certificates for wallet: ${walletAddress}`);
+    console.log(`Fetching certificates for wallet: ${walletAddress}`);
     
     if (!walletAddress.match(/^0x[a-fA-F0-9]{40}$/)) {
       return res.status(400).json({ 
@@ -247,7 +239,7 @@ export class CertificateController {
     const balance = await this.contract!.balanceOf(walletAddress);
     const balanceNum = parseInt(balance.toString());
     
-    console.log(`📊 Wallet balance: ${balanceNum} certificates`);
+    console.log(`Wallet balance: ${balanceNum} certificates`);
     
     if (balanceNum === 0) {
       return res.json({

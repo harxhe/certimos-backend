@@ -8,7 +8,7 @@ async function getCertificateInfo() {
   const deployment = deployments[networkName];
   
   if (!deployment) {
-    console.log(`❌ No deployment found for network: ${networkName}`);
+    console.log(`No deployment found for network: ${networkName}`);
     console.log("Available networks:", Object.keys(deployments));
     return;
   }
@@ -24,13 +24,13 @@ async function getCertificateInfo() {
     const certificate = Certificate.attach(contractAddress);
     
     // Get basic contract info
-    console.log(`📜 Contract Address: ${contractAddress}`);
-    console.log(`👑 Contract Owner: ${await certificate.getFunction("owner")()}`);
-    console.log(`📛 Token Name: ${await certificate.getFunction("name")()}`);
-    console.log(`🏷  Token Symbol: ${await certificate.getFunction("symbol")()}`);
+    console.log(`Contract Address: ${contractAddress}`);
+    console.log(`Contract Owner: ${await certificate.getFunction("owner")()}`);
+    console.log(`Token Name: ${await certificate.getFunction("name")()}`);
+    console.log(`Token Symbol: ${await certificate.getFunction("symbol")()}`);
 
     // Try to get certificate information for different token IDs
-    console.log("\n🎯 MINTED CERTIFICATES:");
+    console.log("\nMINTED CERTIFICATES:");
     console.log("-".repeat(50));
     
     let tokenId = 0;
@@ -58,29 +58,29 @@ async function getCertificateInfo() {
       console.log("   No certificates have been minted yet.");
       console.log("   Run the mint-certificate.ts script to mint certificates.");
     } else {
-      console.log(`\n📊 Total Certificates Found: ${certificatesFound}`);
+      console.log(`\nTotal Certificates Found: ${certificatesFound}`);
     }
     
     console.log("\n" + "=".repeat(50));
-    console.log("📋 METAMASK IMPORT INFORMATION:");
+    console.log("METAMASK IMPORT INFORMATION:");
     console.log("=".repeat(50));
-    console.log("🌐 Network: XDC Apothem Testnet");
-    console.log("🔗 RPC URL: https://rpc.apothem.network/");
-    console.log("🆔 Chain ID: 51");
-    console.log("💰 Currency: TXDC");
-    console.log("🔍 Explorer: https://explorer.apothem.network/");
-    console.log(`📜 Contract Address: ${contractAddress}`);
-    console.log("🎓 Contract Type: ERC-721 (NFT)");
+    console.log("Network: XDC Apothem Testnet");
+    console.log("RPC URL: https://rpc.apothem.network/");
+    console.log("Chain ID: 51");
+    console.log("Currency: TXDC");
+    console.log("Explorer: https://explorer.apothem.network/");
+    console.log(`Contract Address: ${contractAddress}`);
+    console.log("Contract Type: ERC-721 (NFT)");
     
     if (certificatesFound > 0) {
-      console.log("\n🎯 Available Token IDs to import:");
+      console.log("\nAvailable Token IDs to import:");
       for (let i = 0; i < certificatesFound; i++) {
         console.log(`   Token ID: ${i}`);
       }
     }
     
   } catch (error) {
-    console.error("❌ Error getting certificate info:", error instanceof Error ? error.message : String(error));
+    console.error("Error getting certificate info:", error instanceof Error ? error.message : String(error));
   }
 }
 

@@ -86,14 +86,14 @@ async function uploadToPinata(metadata: CertificateMetadata, filename: string): 
     if (response.ok) {
       const result = await response.json() as { IpfsHash: string };
       const ipfsUri = `ipfs://${result.IpfsHash}`;
-      console.log(`✅ Pinata Upload successful: ${ipfsUri}`);
+      console.log(`Pinata Upload successful: ${ipfsUri}`);
       return ipfsUri;
     } else {
       const error = await response.text();
       throw new Error(`Pinata upload failed: ${error}`);
     }
   } catch (error) {
-    console.error('❌ Pinata upload failed:', error);
+    console.error('Pinata upload failed:', error);
     throw new Error(`Pinata upload failed: ${error}`);
   }
 }
@@ -112,7 +112,7 @@ async function getDeployedContractAddress(): Promise<string | null> {
     // Try to import deployments
     // const deploymentsPath = path.join(process.cwd(), 'scripts', 'deployments.js');
     if (contractAddressFromDeployments) {
-      console.log(`✅ Found deployment for network: ${networkName} at address ${contractAddressFromDeployments}`);
+      console.log(`Found deployment for network: ${networkName} at address ${contractAddressFromDeployments}`);
       return contractAddressFromDeployments;
     }
     return null;
@@ -274,7 +274,7 @@ export async function generateCertificatesFromCSV(
       const filepath = path.join(metadataDir, filename);
       
       fs.writeFileSync(filepath, JSON.stringify(metadata, null, 2));
-      console.log(`✅ Generated metadata: ${filename}`);
+      console.log(`Generated metadata: ${filename}`);
 
       certificates.push({
         recipient,
@@ -287,7 +287,7 @@ export async function generateCertificatesFromCSV(
     return certificates;
     
   } catch (error) {
-    console.error('❌ Error generating certificates from CSV:', error);
+    console.error('Error generating certificates from CSV:', error);
     throw error;
   }
 }
@@ -359,7 +359,7 @@ export async function autoMintCertificatesFromCSV(csvFile: string, contractAddre
     // 1. Parse CSV file
     const recipients = await parseRecipientsCSV(csvFile);
 
-    console.log(`📊 Loaded ${recipients.length} recipients from CSV`);
+    console.log(`Loaded ${recipients.length} recipients from CSV`);
     
     if (recipients.length === 0) {
       return {
@@ -379,15 +379,14 @@ export async function autoMintCertificatesFromCSV(csvFile: string, contractAddre
       // Fallback to environment variable or hardcoded address
       throw new Error('Contract address not found in deployments or environment variables');
     } else {
-      console.log('✅ Using contract address from deployments');
+      console.log('Using contract address from deployments');
     }
 
     console.log(`🔗 Contract Address: ${contractAddress}`);
 
     // 3. Connect to blockchain network using regular ethers
     const provider = new ethers.JsonRpcProvider(process.env.APOTHEM_RPC_URL);
-    // Note: In production, this would use the user's wallet, not a hardcoded private key
-    console.log(`💳 Using provider for contract interaction`);
+    console.log(`Using provider for contract interaction`);
 
     // 4. Load available certificate templates for matching
     let availableCertificates: any[] = [];
@@ -396,10 +395,10 @@ export async function autoMintCertificatesFromCSV(csvFile: string, contractAddre
       if (fs.existsSync(metadataPath)) {
         const metadataContent = fs.readFileSync(metadataPath, 'utf8');
         availableCertificates = JSON.parse(metadataContent);
-        console.log(`📄 Found ${availableCertificates.length} certificate templates`);
+        console.log(`Found ${availableCertificates.length} certificate templates`);
       }
     } catch (error) {
-      console.log('⚠️  Could not load certificate templates');
+      console.log('Could not load certificate templates');
     }
 
     // 5. Set up contract connection
@@ -415,10 +414,10 @@ export async function autoMintCertificatesFromCSV(csvFile: string, contractAddre
     try {
       const actualAddress = await certificate.getAddress();
       const owner = await certificate.owner();
-      console.log(`📍 Contract Address: ${actualAddress}`);
+      console.log(`Contract Address: ${actualAddress}`);
       console.log(`👑 Contract Owner: ${owner}`);
     } catch (error) {
-      console.log('⚠️  Could not verify contract details');
+      console.log('Could not verify contract details');
     }
 
     // 7. Process each recipient
@@ -476,10 +475,10 @@ export async function autoMintCertificatesFromCSV(csvFile: string, contractAddre
         const filename = `certificate-${recipient.name.replace(/\s+/g, '-').toLowerCase()}-${i + 1}.json`;
         
         // Upload metadata to Pinata
-        console.log(`📤 Uploading metadata to Pinata for ${recipient.name}...`);
+        console.log(`Uploading metadata to Pinata for ${recipient.name}...`);
         const pinataUri = await uploadToPinata(metadata, filename);
         
-        console.log(`✅ Metadata uploaded successfully!`);
+        console.log(`Metadata uploaded successfully!`);
         console.log(`   Pinata URI: ${pinataUri}`);
 
         // Mint certificate with uploaded metadata
@@ -492,12 +491,12 @@ export async function autoMintCertificatesFromCSV(csvFile: string, contractAddre
           pinataUri
         );
         
-        console.log(`📝 Transaction Hash: ${tx.hash}`);
-        console.log(`⏳ Waiting for confirmation...`);
+        console.log(`Transaction Hash: ${tx.hash}`);
+        console.log(`Waiting for confirmation...`);
         
         await tx.wait();
         
-        console.log(`✅ Certificate minted successfully!`);
+        console.log(`Certificate minted successfully!`);
         
         results.push({
           success: true,
@@ -510,7 +509,7 @@ export async function autoMintCertificatesFromCSV(csvFile: string, contractAddre
         successCount++;
         
       } catch (error: any) {
-        console.error(`❌ Failed to process certificate for ${recipient.name}:`, error.message);
+        console.error(`Failed to process certificate for ${recipient.name}:`, error.message);
         
         results.push({
           success: false,
@@ -524,9 +523,9 @@ export async function autoMintCertificatesFromCSV(csvFile: string, contractAddre
     }
 
     console.log('\n--- Minting Complete ---');
-    console.log(`✅ Successfully minted: ${successCount} certificates`);
-    console.log(`❌ Failed to mint: ${failCount} certificates`);
-    console.log(`📊 Total processed: ${recipients.length} recipients`);
+    console.log(`Successfully minted: ${successCount} certificates`);
+    console.log(`Failed to mint: ${failCount} certificates`);
+    console.log(`Total processed: ${recipients.length} recipients`);
 
     return {
       success: true,

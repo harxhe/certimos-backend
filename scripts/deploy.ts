@@ -19,10 +19,8 @@ interface DeploymentInfo {
   owner: string;
 }
 
-// NOTE: A full implementation for saving to deployments.ts would go here.
-// For now, this is a placeholder to show where it would be called.
 export async function saveDeploymentInfo(deploymentInfo: DeploymentInfo) {
-  console.log("📝 Saving deployment information...");
+  console.log("Saving deployment information...");
   
   const deploymentsFilePath = path.join(__dirname, 'deployments.ts');
   
@@ -85,11 +83,11 @@ export const deployments: Record<string, DeploymentConfig> = ${JSON.stringify(cu
     
     // Write the updated deployments file
     fs.writeFileSync(deploymentsFilePath, newContent, 'utf8');
-    console.log(`✅ Deployment information saved to ${deploymentsFilePath}`);
-    console.log(`📍 Contract "${deploymentInfo.contractName}" added to network "${deploymentInfo.network}"`);
+    console.log(`Deployment information saved to ${deploymentsFilePath}`);
+    console.log(`Contract "${deploymentInfo.contractName}" added to network "${deploymentInfo.network}"`);
     
   } catch (error) {
-    console.error("❌ Error saving deployment information:", error);
+    console.error("Error saving deployment information:", error);
     throw error;
   }
 }
@@ -125,7 +123,7 @@ async function main() {
 
   console.log("Waiting for deployment transaction to be mined...");
   await certificate.waitForDeployment();
-  console.log("✅ Deployment transaction mined!");
+  console.log("Deployment transaction mined!");
 
 
   const address = await certificate.getAddress();

@@ -91,7 +91,7 @@ const router = Router();
 // NEW: Prepare single certificate for frontend minting (with optional image upload)
 router.post('/prepare-single-certificate', optionalImageUpload.single('certificateImage'), async (req: any, res: Response) => {
   try {
-    console.log('🚀 Starting single certificate minting...');
+    console.log('Starting single certificate minting...');
     console.log('Request headers:', req.headers);
     console.log('Content-Type:', req.get('content-type'));
     console.log('Request body:', req.body);
@@ -227,7 +227,7 @@ router.post('/prepare-single-certificate', optionalImageUpload.single('certifica
       }
     }
 
-    console.log('📤 Uploading metadata to Pinata for frontend minting...');
+    console.log('Uploading metadata to Pinata for frontend minting...');
     
     // Upload metadata to Pinata using inline function
     try {
@@ -269,7 +269,7 @@ router.post('/prepare-single-certificate', optionalImageUpload.single('certifica
       const pinataResult = await pinataResponse.json() as { IpfsHash: string };
       const pinataUri = `ipfs://${pinataResult.IpfsHash}`;
       
-      console.log('✅ Pinata Upload successful:', pinataUri);
+      console.log('Pinata Upload successful:', pinataUri);
       
       // Return data needed for frontend minting
       res.status(200).json({
@@ -290,7 +290,7 @@ router.post('/prepare-single-certificate', optionalImageUpload.single('certifica
       });
       
     } catch (pinataError) {
-      console.error('❌ Pinata upload failed:', pinataError);
+      console.error('Pinata upload failed:', pinataError);
       res.status(500).json({
         error: 'Failed to upload certificate metadata',
         details: pinataError instanceof Error ? pinataError.message : 'Unknown error'
@@ -298,7 +298,7 @@ router.post('/prepare-single-certificate', optionalImageUpload.single('certifica
     }
 
   } catch (error) {
-    console.error('❌ Error in single certificate minting:', error);
+    console.error('Error in single certificate minting:', error);
     
     // Clean up uploaded file on error
     if (req.file && fs.existsSync(req.file.path)) {
@@ -357,7 +357,7 @@ router.post('/auto-mint-with-ipfs', upload.single('csvFile'), async (req: any, r
       });
     }
 
-    console.log('🚀 Starting enhanced automatic certificate minting with IPFS/Pinata upload...');
+    console.log('Starting enhanced automatic certificate minting with IPFS/Pinata upload...');
     
     // Call the auto-minting function with IPFS integration
     const result = await autoMintCertificatesFromCSV(csvFile, contractAddress, eventName, certificateName);
@@ -559,9 +559,9 @@ router.post('/validate-csv', upload.single('csvFile'), async (req: any, res: Res
 
 router.post('/deploy', async (req: Request, res: Response) => {
   const { networkName, contractName, walletAddress } = req.body;
-  console.log(`🚀 Deploying contract: ${contractName} on ${networkName}`);
+  console.log(`Deploying contract: ${contractName} on ${networkName}`);
   if (!networkName || !contractName || !walletAddress) {
-    console.error("❌ Validation failed: Missing required fields");
+    console.error("Validation failed: Missing required fields");
     return res.status(400).json({
       error: 'Missing required fields',
       required: ['networkName', 'contractName', 'walletAddress'],
@@ -602,7 +602,7 @@ router.post('/deploy', async (req: Request, res: Response) => {
     });
     
     child.on('close', (code) => {
-      console.log(`✅ Deployment process completed with code ${code}`);
+      console.log(`Deployment process completed with code ${code}`);
       if (code !== 0) {
         const error = new Error(`Script exited with error code ${code}`);
         (error as any).stdout = stdoutData;
@@ -629,7 +629,7 @@ router.post('/deploy', async (req: Request, res: Response) => {
       const result = JSON.parse(resultLine.replace('DEPLOYMENT_RESULT:', '').trim());
       
       if (result.success) {
-        console.log("✅ Contract deployed successfully");
+        console.log("Contract deployed successfully");
         res.json({
           success: true,
           message: 'Contract deployed successfully!',
@@ -916,7 +916,7 @@ router.post('/save-deployment', async (req: Request, res: Response) => {
 
     await saveDeploymentInfo(deploymentInfo);
     
-    console.log("✅ Deployment info saved successfully");
+    console.log("Deployment info saved successfully");
     res.json({
       success: true,
       message: 'Deployment information saved successfully!',
@@ -935,8 +935,8 @@ router.post('/save-deployment', async (req: Request, res: Response) => {
 // OLD: Backend minting route (kept for backward compatibility)
 router.post('/mint-single-certificate', optionalImageUpload.single('certificateImage'), async (req: any, res: Response) => {
   try {
-    console.log('⚠️  Using deprecated backend minting. Consider using /prepare-single-certificate instead.');
-    console.log('🚀 Starting single certificate minting...');
+    console.log('Using deprecated backend minting. Consider using /prepare-single-certificate instead.');
+    console.log('Starting single certificate minting...');
     console.log('Request headers:', req.headers);
     console.log('Content-Type:', req.get('content-type'));
     console.log('Request body:', req.body);
@@ -1047,7 +1047,7 @@ router.post('/mint-single-certificate', optionalImageUpload.single('certificateI
     }
 
   } catch (error) {
-    console.error('❌ Single certificate minting error:', error);
+    console.error('Single certificate minting error:', error);
     
     // Clean up uploaded file if there was an error
     if (req.file && fs.existsSync(req.file.path)) {

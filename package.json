@@ -54,7 +54,6 @@
     "start": "node dist/src/server.js",
     "dev": "nodemon --exec \"tsx src/server.ts\"",
     "build": "npx hardhat compile && tsc",
-    "test": "hardhat test",
-    "test-services": "node dist/src/testServices.js"
+    "test": "hardhat test"
   }
 }

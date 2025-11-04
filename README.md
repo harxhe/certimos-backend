@@ -1,57 +1,178 @@
-# Sample Hardhat 3 Beta Project (`mocha` and `ethers`)
+# Certimos Backend
 
-This project showcases a Hardhat 3 Beta project using `mocha` for tests and the `ethers` library for Ethereum interactions.
+Certimos is a blockchain-based certificate management system that allows organizations to issue, verify, and manage digital certificates as NFTs (Non-Fungible Tokens). This backend provides the API infrastructure and smart contract deployment capabilities for the Certimos platform.
 
-To learn more about the Hardhat 3 Beta, please visit the [Getting Started guide](https://hardhat.org/docs/getting-started#getting-started-with-hardhat-3). To share your feedback, join our [Hardhat 3 Beta](https://hardhat.org/hardhat3-beta-telegram-group) Telegram group or [open an issue](https://github.com/NomicFoundation/hardhat/issues/new) in our GitHub issue tracker.
+## Features
 
-## Project Overview
+- **Digital Certificate Issuance**: Issue certificates as ERC-721 NFTs on the blockchain
+- **Certificate Verification**: Verify certificate authenticity and ownership
+- **IPFS Integration**: Store certificate metadata on IPFS via Pinata
+- **Wallet Management**: Handle blockchain wallet interactions
+- **Express.js API**: RESTful API for frontend integration
+- **Smart Contract Deployment**: Hardhat-based deployment and testing framework
 
-This example project includes:
+## Project Structure
 
-- A simple Hardhat configuration file.
-- Foundry-compatible Solidity unit tests.
-- TypeScript integration tests using `mocha` and ethers.js
-- Examples demonstrating how to connect to different types of networks, including locally simulating OP mainnet.
+This project includes:
+
+- **Smart Contracts**: ERC-721 certificate contracts using OpenZeppelin
+- **Express.js Backend**: API server with TypeScript support
+- **IPFS Integration**: Metadata storage via Pinata
+- **Hardhat Framework**: Contract compilation, testing, and deployment
+- **TypeScript**: Full TypeScript support for type safety
+
+## Installation
+
+1. **Clone the repository**
+   ```bash
+   git clone https://github.com/harxhe/certimos-backend.git
+   cd certimos-backend
+   ```
+
+2. **Install dependencies**
+   ```bash
+   npm install
+   ```
+
+3. **Environment Setup**
+   Create a `.env` file in the root directory and configure the following variables:
+   ```env
+   PORT=3000
+   PINATA_JWT=your_pinata_jwt_token
+   PINATA_GATEWAY_URL=your_pinata_gateway_url
+   SUPABASE_URL=your_supabase_url
+   SUPABASE_ANON_KEY=your_supabase_anon_key
+   PRIVATE_KEY=your_wallet_private_key
+   RPC_URL=your_blockchain_rpc_url
+   ```
 
 ## Usage
 
-### Running Tests
+### Development Server
 
-To run all the tests in the project, execute the following command:
+Start the development server with hot reloading:
 
-```shell
-npx hardhat test
+```bash
+npm run dev
 ```
 
-You can also selectively run the Solidity or `mocha` tests:
+The server will start on `http://localhost:3000` by default.
 
-```shell
+### Building the Project
+
+Compile smart contracts and TypeScript:
+
+```bash
+npm run build
+```
+
+### Production
+
+Start the production server:
+
+```bash
+npm start
+```
+
+### Smart Contract Testing
+
+Run all tests (both Solidity and TypeScript):
+
+```bash
+npm test
+```
+
+Run specific test types:
+
+```bash
+# Run Solidity tests
 npx hardhat test solidity
+
+# Run TypeScript/Mocha tests
 npx hardhat test mocha
 ```
 
-### Make a deployment to Sepolia
+### Smart Contract Deployment
 
-This project includes an example Ignition module to deploy the contract. You can deploy this module to a locally simulated chain or to Sepolia.
+Deploy contracts to different networks:
 
-To run the deployment to a local chain:
+```bash
+# Deploy to local network
+npx hardhat ignition deploy ignition/modules/Certificate.ts
 
-```shell
-npx hardhat ignition deploy ignition/modules/Counter.ts
+# Deploy to testnet (requires proper configuration)
+npx hardhat ignition deploy --network sepolia ignition/modules/Certificate.ts
 ```
 
-To run the deployment to Sepolia, you need an account with funds to send the transaction. The provided Hardhat configuration includes a Configuration Variable called `SEPOLIA_PRIVATE_KEY`, which you can use to set the private key of the account you want to use.
+## API Endpoints
 
-You can set the `SEPOLIA_PRIVATE_KEY` variable using the `hardhat-keystore` plugin or by setting it as an environment variable.
+The backend provides several API endpoints for certificate management:
 
-To set the `SEPOLIA_PRIVATE_KEY` config variable using `hardhat-keystore`:
+- **GET** `/api/health` - Health check
+- **GET** `/api/certificates/wallet/:walletAddress` - Get user certificates
+- **POST** `/api/certificates/issue` - Issue new certificate
+- **GET** `/api/certificates/verify/:tokenId` - Verify certificate
+- **POST** `/api/wallet/generate` - Generate new wallet
+- **GET** `/api/wallet/balance/:address` - Get wallet balance
 
-```shell
-npx hardhat keystore set SEPOLIA_PRIVATE_KEY
+For detailed API documentation, see [API_ENDPOINTS.md](./API_ENDPOINTS.md).
+
+## Technology Stack
+
+- **Blockchain**: Ethereum-compatible networks
+- **Smart Contracts**: Solidity with OpenZeppelin libraries
+- **Backend**: Node.js with Express.js
+- **Language**: TypeScript
+- **Testing**: Hardhat with Mocha and Chai
+- **Storage**: IPFS via Pinata
+- **Database**: Supabase (PostgreSQL)
+- **Development**: Nodemon for hot reloading
+
+## Project Structure
+
+```
+certimos-backend/
+├── contracts/           # Smart contracts
+├── src/
+│   ├── controllers/     # API controllers
+│   ├── middleware/      # Express middleware
+│   ├── routes/         # API routes
+│   └── server.ts       # Main server file
+├── scripts/            # Deployment and utility scripts
+├── test/              # Smart contract tests
+├── types/             # TypeScript type definitions
+├── artifacts/         # Compiled contracts
+└── uploads/           # File upload directory
 ```
 
-After setting the variable, you can run the deployment with the Sepolia network:
+## Configuration
 
-```shell
-npx hardhat ignition deploy --network sepolia ignition/modules/Counter.ts
-```
+### Hardhat Configuration
+
+The project uses Hardhat 3 Beta with the following features:
+- TypeScript support
+- Ethers.js integration
+- Test coverage
+- Gas reporting
+- Contract verification
+
+### Network Configuration
+
+Configure networks in `hardhat.config.ts` for deployment to different chains.
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Add tests for new functionality
+5. Run tests and ensure they pass
+6. Submit a pull request
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## Support
+
+For questions or support, please open an issue on GitHub or contact the development team.

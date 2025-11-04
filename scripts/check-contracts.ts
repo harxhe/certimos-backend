@@ -27,13 +27,13 @@ async function checkContractDeployment() {
   
   if (!contractAddress) {
     // Fallback to manual address if deployments file doesn't exist
-    contractAddress = "0x14110409Bcf17465c863493c40dB7ffd49329c6D"; // Replace with the address you want to check
-    console.log("⚠  Using fallback address (deployments.ts not found or no deployment for this network)");
+    contractAddress = "0x14110409Bcf17465c863493c40dB7ffd49329c6D";
+    console.log("Using fallback address (deployments.ts not found or no deployment for this network)");
   } else {
-    console.log("✅ Using address from deployments.ts");
+    console.log("Using address from deployments.ts");
   }
   
-  console.log("🔍 Checking contract deployment status...");
+  console.log("Checking contract deployment status...");
   console.log(`Contract Address: ${contractAddress}`);
   console.log(`Network: ${networkName}`);
 
@@ -42,14 +42,14 @@ async function checkContractDeployment() {
     const code = await ethers.provider.getCode(contractAddress);
     
     if (code === "0x") {
-      console.log("❌ No contract found at this address");
+      console.log("No contract found at this address");
       console.log("   - The address might be wrong");
       console.log("   - The contract might not be deployed on this network");
       console.log("   - The contract might have been self-destructed");
       return false;
     }
     
-    console.log("✅ Contract code found at address!");
+    console.log("Contract code found at address!");
     console.log(`   Code length: ${code.length} characters`);
     
     // Method 2: Try to connect to the contract and call a function
@@ -59,7 +59,7 @@ async function checkContractDeployment() {
       
       // Try to call the owner function
       const owner = await certificate.getFunction("owner")();
-      console.log("✅ Contract is functional!");
+      console.log("Contract is functional!");
       console.log(`   Contract owner: ${owner}`);
       
       // Try to get contract name and symbol
@@ -75,30 +75,30 @@ async function checkContractDeployment() {
       return true;
       
     } catch (error) {
-      console.log("⚠  Contract exists but may not be the expected type");
+      console.log("Contract exists but may not be the expected type");
       console.log(`   Error: ${error instanceof Error ? error.message : String(error)}`);
       return false;
     }
     
   } catch (error) {
-    console.error("❌ Error checking contract:", error instanceof Error ? error.message : String(error));
+    console.error("Error checking contract:", error instanceof Error ? error.message : String(error));
     return false;
   }
 }
 
 async function main() {
   console.log("=".repeat(60));
-  console.log("🔍 CONTRACT DEPLOYMENT CHECKER");
+  console.log("CONTRACT DEPLOYMENT CHECKER");
   console.log("=".repeat(60));
   
   const isDeployed = await checkContractDeployment();
   
   console.log("\n" + "=".repeat(60));
   if (isDeployed) {
-    console.log("🎉 RESULT: Contract is successfully deployed and functional!");
+    console.log("RESULT: Contract is successfully deployed and functional!");
   } else {
-    console.log("💡 RESULT: Contract is not deployed or not functional");
-    console.log("\n📝 To deploy the contract, run:");
+    console.log("RESULT: Contract is not deployed or not functional");
+    console.log("\nTo deploy the contract, run:");
     console.log("   yarn hardhat run scripts/deploy.ts --network <network-name>");
   }
   console.log("=".repeat(60));

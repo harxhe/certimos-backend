@@ -90,6 +90,46 @@ export const deployments: Record<string, DeploymentConfig> = {
       "deployer": "0xaacae99d6e2bf87813233e3d46eb48c9f796016c",
       "contractName": "DIWALI",
       "owner": "0xaacae99d6e2bf87813233e3d46eb48c9f796016c"
+    },
+    "Test Contract": {
+      "contractAddress": "0x2da976338dDD8bae22A3544662888818E1c28C8a",
+      "network": "apothem",
+      "blockNumber": 0,
+      "transactionHash": "0x0e8677b88891029a1c3215114fd360a2647d51b9f5f38577b9ea94a7a035c562",
+      "deployedAt": "2025-10-31T13:52:51.558Z",
+      "deployer": "0xaacae99d6e2bf87813233e3d46eb48c9f796016c",
+      "contractName": "Test Contract",
+      "owner": "0xaacae99d6e2bf87813233e3d46eb48c9f796016c"
+    },
+    "Adobe": {
+      "contractAddress": "0x841B4Db1439303DE62482d1986f33950436Fd9a2",
+      "network": "apothem",
+      "blockNumber": 0,
+      "transactionHash": "0x82d63cf069f3d064f0d439073c1be7af9cc0ead9b98402cbb54e9b6e1344d498",
+      "deployedAt": "2025-10-31T16:08:02.641Z",
+      "deployer": "0x1bdae98049aaac9fadf4e302219a4e6a47c4a2f9",
+      "contractName": "Adobe",
+      "owner": "0x1bdae98049aaac9fadf4e302219a4e6a47c4a2f9"
+    },
+    "Samsung": {
+      "contractAddress": "0x4956653bC9B1f414eC1DD216c89f7D6F0BBE8165",
+      "network": "apothem",
+      "blockNumber": 0,
+      "transactionHash": "0xfe9ee37956013b66880c00e842aa65fce7ce7e89349a25993d04d8fa290b35c6",
+      "deployedAt": "2025-10-31T16:23:31.243Z",
+      "deployer": "0xb0feb403dcfbefb1c560bea60ba4a5727a367013",
+      "contractName": "Samsung",
+      "owner": "0xb0feb403dcfbefb1c560bea60ba4a5727a367013"
+    },
+    "Samsung Hack": {
+      "contractAddress": "0xa4Ecd5c59BE351d47d4CF4ecd23Ef9046Af3cE75",
+      "network": "apothem",
+      "blockNumber": 0,
+      "transactionHash": "0xdeec55f63d9fcfc81bfa3d17ee83864fad230baa960aeec5fbed917e50a6d61a",
+      "deployedAt": "2025-10-31T16:51:58.157Z",
+      "deployer": "0xb0feb403dcfbefb1c560bea60ba4a5727a367013",
+      "contractName": "Samsung Hack",
+      "owner": "0xb0feb403dcfbefb1c560bea60ba4a5727a367013"
     }
   }
 };

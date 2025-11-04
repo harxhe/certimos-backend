@@ -169,10 +169,10 @@ Configure networks in `hardhat.config.ts` for deployment to different chains.
 5. Run tests and ensure they pass
 6. Submit a pull request
 
-## License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ## Support
 
 For questions or support, please open an issue on GitHub or contact the development team.
+
+
+[Frontend Repo](https://github.com/gracymehndiratta/CERTIMOS)
